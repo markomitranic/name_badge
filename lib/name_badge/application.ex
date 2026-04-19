@@ -36,8 +36,7 @@ defmodule NameBadge.Application do
       NameBadge.Spotify.Tokens,
       NameBadge.Spotify.Library,
       NameBadge.ScreenManager,
-      {PhoenixPlayground, live: NameBadge.PreviewLive},
-      NameBadge.DevReloader
+      {PhoenixPlayground, live: NameBadge.PreviewLive}
     ]
   end
 
