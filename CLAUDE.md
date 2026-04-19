@@ -12,12 +12,10 @@ Environment status: toolchain bootstrapped, simulator working (`MIX_TARGET=host 
 
 ## Git Remotes
 
-- `origin` → `git@github.com:markomitranic/name_badge.git` — this fork; push changes here.
-- `upstream` → `https://github.com/protolux-electronics/name_badge.git` — original; read-only in practice.
+- `origin` → `git@github.com:markomitranic/name_badge.git` — this is Marko's personal fork. **Push directly to `origin/main`**; this is not a shared project and there is no PR review flow. Feel free to commit and push without asking once the work is done and verified.
+- `upstream` → `https://github.com/protolux-electronics/name_badge.git` — original; read-only in practice, no interest in upstreaming changes.
 
-Pull upstream updates with `git fetch upstream && git merge upstream/main` (or rebase).
-
-Community PR worth knowing about: `protolux-electronics/name_badge#7` adds the LiveView host-mode preview (already in upstream `main`, hence in this fork).
+Pull upstream updates with `git fetch upstream && git merge upstream/main` (or rebase) — only if you explicitly want something from upstream.
 
 ## Documentation (`docs/`)
 
