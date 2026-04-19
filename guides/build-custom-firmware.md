@@ -13,14 +13,18 @@ instructions for your machine.
 Once everything is installed, in this root directory of the repo, run:
 
 ```sh
-export DEVICE_SETUP_URL="goatmire.fly.dev"
 export MIX_TARGET=trellis
 mix deps.get
 mix firmware
 ```
 
-To upload via the network, you can run `mix upload wisteria.local`. This
-requires that either the device is already running a valid firmware, and is
+To upload over SSH (device must be reachable on the network):
+
+```sh
+cat _build/trellis_dev/nerves/images/name_badge.fw | ssh -s nerves@wisteria.local fwup
+```
+
+This requires that the device is already running a valid firmware and is
 accessible over your local network.
 
 This means that it is connected to the same WiFi network, or that it is directly

@@ -44,13 +44,10 @@ defmodule NameBadge.MixProject do
       {:shoehorn, "~> 0.9.1"},
       {:ring_logger, "~> 0.11.0"},
       {:toolshed, "~> 0.4.0"},
-      {:slipstream, "~> 1.2"},
       {:req, "~> 0.5"},
       {:dither, "~> 0.1.1"},
       {:typst, "~> 0.3"},
-      {:qr_code, "~> 3.2.0"},
       {:tzdata, "~> 1.1"},
-      {:icalendar, "~> 1.1"},
 
       # Allow Nerves.Runtime on host to support development, testing and CI.
       # See config/host.exs for usage.

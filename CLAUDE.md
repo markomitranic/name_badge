@@ -4,9 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Purpose
 
-This repository is a fork of [`protolux-electronics/name_badge`](https://github.com/protolux-electronics/name_badge) — the Elixir/Nerves firmware for the Protolux Trellis e-ink badge distributed at the Goatmire Elixir conference (Gothenburg, September 2025). The owner (Marko) received a badge at the conference and uses this fork as a base for independent development: simplifying what's here, possibly repurposing the hardware for unrelated apps over time.
+This repository is a fork of [`protolux-electronics/name_badge`](https://github.com/protolux-electronics/name_badge) — the Elixir/Nerves firmware for the Protolux Trellis e-ink badge distributed at the Goatmire Elixir conference (Gothenburg, September 2025). The owner (Marko) received a badge at the conference and uses this fork as a personal playground for unrelated apps over time.
 
-Environment status (as of 2026-04-19): toolchain bootstrapped, simulator working (`MIX_TARGET=host iex -S mix`), badge successfully flashed from source to `name_badge 0.3.1` over SSH. Original sibling clones (`nerves_system_trellis/`, `usb_fel_loaders/`, `goatmire/`) moved out of the workspace — they're consumed via hex or re-cloned on demand. See `docs/` for per-layer paper documentation that replaces them.
+**Cleanup state (2026-04-19)**: conference-specific functionality has been stripped. Kept: core substrate (`Screen` framework, `Layout`, `Display`/Typst/Dither/EInk pipeline, `ButtonMonitor`, `ScreenManager`, `VintageNet`/`VintageNetWiFi`, `TimezoneService`, `Battery`, NervesHub link, host-mode LiveView preview + `DevReloader`), the `Weather` screen (now the home screen), and `Settings` → `WiFi` + `SystemInfo`. Removed: `NameBadge.Socket` (Goatmire websocket), `NameBadge.Gallery` + gallery screen, `NameBadge.CalendarService` + calendar screen, `Screen.NameBadge` (QR personalization), `Screen.Snake`, `Screen.Settings.{QrCode,Tutorial,SudoMode}`; deps `:qr_code`/`:slipstream`/`:icalendar` (slipstream stays transitively via `nerves_hub_link`); env vars `DEVICE_SETUP_URL`/`CALENDAR_URL`; assets `priv/sudo_mode.bin`, `priv/typst/images/tigris_logo.svg`, `priv/typst/images/icons/link*.png`.
+
+Environment status: toolchain bootstrapped, simulator working (`MIX_TARGET=host iex -S mix`), badge previously flashed from source to `name_badge 0.3.1` over SSH (pre-cleanup). Original sibling clones (`nerves_system_trellis/`, `usb_fel_loaders/`, `goatmire/`) moved out of the workspace — they're consumed via hex or re-cloned on demand. See `docs/` for per-layer paper documentation. **Note**: `docs/elixir_application.md` predates this cleanup; sections on Socket/Gallery/Calendar/QR no longer reflect the code.
 
 ## Git Remotes
 
@@ -47,20 +49,18 @@ AI-consumable paper documentation extracted from the four upstream repos. Each f
 
 ## Required Environment Variables
 
-`mise.toml` pins `MIX_TARGET=trellis` by default. The rest live in `.mise.local.toml` (git-ignored):
+`mise.toml` pins `MIX_TARGET=trellis` by default. Optional overrides live in `.mise.local.toml` (git-ignored):
 
 ```toml
 [env]
-DEVICE_SETUP_URL = "goatmire.fly.dev"
 NERVES_WIFI_SSID = "..."
 NERVES_WIFI_PASSPHRASE = "..."
 # Optional:
 # NH_PRODUCT_KEY = "..."
 # NH_PRODUCT_SECRET = "..."
-# CALENDAR_URL = "..."
 ```
 
-`config/config.exs` raises at compile time if `DEVICE_SETUP_URL` is missing.
+Wi-Fi credentials can also be set at runtime on the device via `VintageNetWiFi.quick_configure/2` (persists across reboots), so baking them into firmware is usually unnecessary.
 
 For the **simulator**, override target per command: `MIX_TARGET=host mix deps.get`, `MIX_TARGET=host iex -S mix`.
 
@@ -151,7 +151,7 @@ If `usb_bulk_send() ERROR -1` appears: let the badge sit in FEL for a few second
 - **Keep the badge on USB-C power during OTA updates** — they can take ~10 min.
 - **WiFi chip is 2.4 GHz only** (Realtek RTL8188FU, visible in dmesg). Dual-band SSIDs fine; 5 GHz-only SSIDs won't connect.
 - **`VintageNetWiFi.quick_configure(ssid, psk)` persists across reboots** — usually faster than rebuilding firmware to change `NERVES_WIFI_SSID`/`NERVES_WIFI_PASSPHRASE`.
-- **Check connection state, not just "associated"**: `VintageNet.get(["interface","wlan0","connection"])` → `:disconnected | :lan | :internet`. Wait for `:internet` before expecting NTP / NervesCloud / calendar sync.
+- **Check connection state, not just "associated"**: `VintageNet.get(["interface","wlan0","connection"])` → `:disconnected | :lan | :internet`. Wait for `:internet` before expecting NTP / NervesCloud / weather sync.
 - **Switching targets corrupts `_build`**: if you build for `host` then `trellis` (or vice versa), native NIFs end up wrong-arch. Symptom: `scrub-otp-release.sh: ERROR: Unexpected executable format`. Fix: `mix deps.clean dither typst && MIX_TARGET=trellis mix deps.get`.
 
 ## When Answering Hardware / Firmware Questions
@@ -163,6 +163,5 @@ Order of authority (most fresh → least):
 3. **Upstream repos on GitHub** — re-clone temporarily if you need source-level access beyond what `docs/` captures:
    - `protolux-electronics/name_badge` (upstream of this fork)
    - `protolux-electronics/nerves_system_trellis` (consumed as hex package)
-   - `protolux-electronics/goatmire` (Phoenix backend at `goatmire.fly.dev`)
    - `gworkman/usb_fel_loaders` (FEL recovery toolkit)
 4. **General Nerves/Elixir knowledge** — fall back when the above don't cover the case.

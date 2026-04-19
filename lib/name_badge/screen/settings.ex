@@ -4,10 +4,7 @@ defmodule NameBadge.Screen.Settings do
   alias NameBadge.Screen.Settings
 
   @settings [
-    {"Personalization", Settings.QrCode},
     {"WiFi Settings", Settings.WiFi},
-    {"Tutorial", Settings.Tutorial},
-    {"Sudo Mode", Settings.SudoMode},
     {"System Info", Settings.SystemInfo}
   ]
 

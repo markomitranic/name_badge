@@ -16,8 +16,7 @@ defmodule NameBadge.Application do
         # Children for all targets
         # Starts a worker by calling: NameBadge.Worker.start_link(arg)
         # {NameBadge.Worker, arg},
-        {Registry, name: NameBadge.Registry, keys: :duplicate},
-        NameBadge.Socket
+        {Registry, name: NameBadge.Registry, keys: :duplicate}
       ] ++ target_children(@target)
 
     # See https://hexdocs.pm/elixir/Supervisor.html
@@ -35,8 +34,9 @@ defmodule NameBadge.Application do
       NameBadge.TimezoneService,
       NameBadge.Weather,
       NameBadge.ScreenManager,
-      {PhoenixPlayground, live: NameBadge.PreviewLive}
-    ] ++ calendar_children()
+      {PhoenixPlayground, live: NameBadge.PreviewLive},
+      NameBadge.DevReloader
+    ]
   end
 
   defp target_children(_target) do
@@ -48,16 +48,7 @@ defmodule NameBadge.Application do
       NameBadge.TimezoneService,
       NameBadge.Weather,
       NameBadge.ScreenManager
-    ] ++ calendar_children()
-  end
-
-  # Only start CalendarService when a CALENDAR_URL is configured
-  defp calendar_children do
-    if NameBadge.CalendarService.enabled?() do
-      [NameBadge.CalendarService]
-    else
-      []
-    end
+    ]
   end
 
   defp button_spec(button_name, opts \\ []) do

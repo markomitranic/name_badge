@@ -44,9 +44,6 @@ defmodule NameBadge.Layout do
     wifi_icon =
       if NameBadge.Network.connected?(@wlan0_property), do: "wifi.png", else: "wifi-slash.png"
 
-    link_icon = if NameBadge.Socket.connected?(), do: "link.png", else: "link-slash.png"
-
-    # Get current time in HH:MM format
     current_time =
       DateTime.utc_now()
       |> DateTime.shift_zone!(NameBadge.timezone())
@@ -61,7 +58,6 @@ defmodule NameBadge.Layout do
         align(horizon, text(size: 14pt)[#{current_time}]),
         image("images/icons/#{battery_icon}"),
         image("images/icons/#{wifi_icon}"),
-        image("images/icons/#{link_icon}"),
       ))
     )
     """

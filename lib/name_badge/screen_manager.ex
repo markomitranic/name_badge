@@ -19,11 +19,7 @@ defmodule NameBadge.ScreenManager do
 
   @impl GenServer
   def init(_opts) do
-    initial_stack =
-      cond do
-        should_show_tutorial?() -> [Screen.Settings.Tutorial, Screen.TopLevel]
-        true -> [Screen.TopLevel]
-      end
+    initial_stack = [Screen.TopLevel]
 
     {:ok, pid} = Screen.start_link(module: hd(initial_stack))
 
@@ -50,15 +46,6 @@ defmodule NameBadge.ScreenManager do
         {:ok, pid} = Screen.start_link(module: previous_screen)
 
         {:noreply, %{state | stack: new_stack, current_screen: pid}}
-    end
-  end
-
-  defp should_show_tutorial?() do
-    config = NameBadge.Config.load_config()
-
-    case config do
-      %{"show_tutorial" => show_tutorial} when is_boolean(show_tutorial) -> show_tutorial
-      _other -> true
     end
   end
 end
