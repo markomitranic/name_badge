@@ -24,3 +24,7 @@ erl_crash.dump
 
 # ignore macOS files
 .DS_Store
+
+# IDE / harness state
+.claude/
+.idea/
