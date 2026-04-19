@@ -205,8 +205,8 @@ defmodule NameBadge.Screen.Spotify do
       align(center + horizon, rotate(-90deg, reflow: true,
         box(width: 280pt, inset: (x: 8pt))[
           #align(center, stack(dir: ttb, spacing: 6pt,
-            text(size: 18pt, weight: "bold", tracking: 0.5pt)[#{escape(artist)}],
-            text(size: 11pt, style: "italic", fill: rgb("#333333"))[#{escape(album)}],
+            text(size: 20pt, weight: "bold", tracking: 0.5pt)[#{escape(artist)}],
+            text(size: 18pt, weight: "semibold", style: "italic", fill: rgb("#333333"))[#{escape(album)}],
           ))
         ]
       ))

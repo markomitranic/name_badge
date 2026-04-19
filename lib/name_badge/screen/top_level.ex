@@ -16,7 +16,7 @@ defmodule NameBadge.Screen.TopLevel do
         []
       end
 
-    @base_screens ++ spotify_entry
+    spotify_entry ++ @base_screens
   end
 
   @impl NameBadge.Screen
