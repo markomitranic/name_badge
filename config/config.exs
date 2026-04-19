@@ -13,6 +13,15 @@ config :elixir, :time_zone_database, Tzdata.TimeZoneDatabase
 
 config :name_badge, :timezone, "Europe/Stockholm"
 
+# Spotify — all three env vars must be set for the Spotify screen to light up.
+# Obtain via `elixir scripts/spotify_auth.exs` on your laptop; paste into
+# .mise.local.toml. If any are missing the screen is gracefully hidden from
+# the top-level menu.
+config :name_badge, :spotify,
+  client_id: System.get_env("SPOTIFY_CLIENT_ID"),
+  client_secret: System.get_env("SPOTIFY_CLIENT_SECRET"),
+  refresh_token: System.get_env("SPOTIFY_REFRESH_TOKEN")
+
 # Customize non-Elixir parts of the firmware. See
 # https://hexdocs.pm/nerves/advanced-configuration.html for details.
 

@@ -33,6 +33,8 @@ defmodule NameBadge.Application do
       NameBadge.BatteryMock,
       NameBadge.TimezoneService,
       NameBadge.Weather,
+      NameBadge.Spotify.Tokens,
+      NameBadge.Spotify.Library,
       NameBadge.ScreenManager,
       {PhoenixPlayground, live: NameBadge.PreviewLive},
       NameBadge.DevReloader
@@ -47,6 +49,8 @@ defmodule NameBadge.Application do
       NameBadge.Display,
       NameBadge.TimezoneService,
       NameBadge.Weather,
+      NameBadge.Spotify.Tokens,
+      NameBadge.Spotify.Library,
       NameBadge.ScreenManager
     ]
   end

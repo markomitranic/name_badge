@@ -56,6 +56,10 @@ NERVES_WIFI_PASSPHRASE = "..."
 # Optional:
 # NH_PRODUCT_KEY = "..."
 # NH_PRODUCT_SECRET = "..."
+# Spotify album art screen (see scripts/spotify_auth.exs to obtain):
+# SPOTIFY_CLIENT_ID = "..."
+# SPOTIFY_CLIENT_SECRET = "..."
+# SPOTIFY_REFRESH_TOKEN = "..."
 ```
 
 Wi-Fi credentials can also be set at runtime on the device via `VintageNetWiFi.quick_configure/2` (persists across reboots), so baking them into firmware is usually unnecessary.
@@ -136,6 +140,29 @@ MIX_TARGET=trellis mix burn
 ```
 
 If `usb_bulk_send() ERROR -1` appears: let the badge sit in FEL for a few seconds, try a known-good USB-C **data** cable, or `brew reinstall libusb`.
+
+## Spotify Album Art Screen
+
+Port of [MusaicFM](https://github.com/obrhoff/MusaicFM): rotates through the user's Spotify *saved albums* library, one cover at a time, cassette-tape spine layout (300×300 art on the left, vertical separator, artist + album rotated 90° up the right side). Swaps album every 5 minutes; button A forces an immediate new album.
+
+The screen only appears in the top-level menu when all three `SPOTIFY_*` env vars above are set.
+
+**One-time setup** (on the laptop):
+
+1. Register a Spotify app at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard). Add redirect URI `http://127.0.0.1:8888/callback`. Copy the **Client ID** and **Client Secret**.
+2. Obtain a refresh token:
+   ```sh
+   SPOTIFY_CLIENT_ID=... SPOTIFY_CLIENT_SECRET=... elixir scripts/spotify_auth.exs
+   ```
+   Browser opens → log in to Spotify → script prints the three env vars.
+3. Paste them into `.mise.local.toml` under `[env]`, then reflash (`mix burn` or ssh-upload).
+
+**Runtime files** on the badge (`/data/`):
+
+- `/data/spotify_tokens.json` — holds any refresh token Spotify rotates (survives reboot; falls back to the env-var value on wipe).
+- `/data/spotify_library.json` — cached album list (refreshed every 24 h, re-fetched on boot if stale).
+
+**Modules**: `NameBadge.Spotify.{Tokens, HTTP, Library, Album}` + `NameBadge.Screen.Spotify`.
 
 ## Gotchas Worth Remembering
 

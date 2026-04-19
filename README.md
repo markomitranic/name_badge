@@ -1,6 +1,6 @@
 # Trellis Badge Firmware
 
-Personal Elixir/Nerves playground for the Protolux Trellis e-ink badge, forked from [`protolux-electronics/name_badge`](https://github.com/protolux-electronics/name_badge) (originally distributed at the [Goatmire](https://goatmire.com/) Elixir conference, Gothenburg 2025). The conference-specific screens (name badge personalization via QR, gallery push from the Goatmire backend, calendar, snake, tutorial) have been stripped out — this fork boots straight into a Weather screen, with a minimal Settings menu (WiFi + System Info). New screens get added here over time.
+Personal Elixir/Nerves playground for the Protolux Trellis e-ink badge, forked from [`protolux-electronics/name_badge`](https://github.com/protolux-electronics/name_badge) (originally distributed at the [Goatmire](https://goatmire.com/) Elixir conference, Gothenburg 2025). The conference-specific screens (name badge personalization via QR, gallery push from the Goatmire backend, calendar, snake, tutorial) have been stripped out — this fork boots straight into a Weather screen, with a minimal Settings menu (WiFi + System Info) and an optional Spotify album art screen (a [MusaicFM](https://github.com/obrhoff/MusaicFM) port that rotates saved-album covers in a cassette-spine layout). New screens get added here over time.
 
 ## Related Repositories
 

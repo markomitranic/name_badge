@@ -3,10 +3,21 @@ defmodule NameBadge.Screen.TopLevel do
 
   alias NameBadge.Screen
 
-  @screens [
+  @base_screens [
     {Screen.Weather, "Weather"},
     {Screen.Settings, "Device Settings"}
   ]
+
+  defp visible_screens do
+    spotify_entry =
+      if NameBadge.Spotify.Tokens.configured?() do
+        [{Screen.Spotify, "Spotify"}]
+      else
+        []
+      end
+
+    @base_screens ++ spotify_entry
+  end
 
   @impl NameBadge.Screen
   def render(assigns) do
@@ -21,7 +32,7 @@ defmodule NameBadge.Screen.TopLevel do
   def mount(_args, screen) do
     screen =
       screen
-      |> assign(screens: @screens, current_index: 0)
+      |> assign(screens: visible_screens(), current_index: 0)
       |> assign(button_hints: %{a: "Next", b: "Select"})
 
     {:ok, screen}
