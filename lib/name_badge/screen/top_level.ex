@@ -4,7 +4,6 @@ defmodule NameBadge.Screen.TopLevel do
   alias NameBadge.Screen
 
   @base_screens [
-    {Screen.Weather, "Weather"},
     {Screen.Settings, "Device Settings"}
   ]
 

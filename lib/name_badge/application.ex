@@ -32,7 +32,6 @@ defmodule NameBadge.Application do
       NameBadge.DisplayMock,
       NameBadge.BatteryMock,
       NameBadge.TimezoneService,
-      NameBadge.Weather,
       NameBadge.Spotify.Tokens,
       NameBadge.Spotify.Library,
       NameBadge.ScreenManager,
@@ -47,7 +46,6 @@ defmodule NameBadge.Application do
       NameBadge.Battery,
       NameBadge.Display,
       NameBadge.TimezoneService,
-      NameBadge.Weather,
       NameBadge.Spotify.Tokens,
       NameBadge.Spotify.Library,
       NameBadge.ScreenManager
