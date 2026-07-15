@@ -101,6 +101,7 @@ defmodule NameBadge.Screen.Spotify do
   def terminate(_reason, screen) do
     cancel_timer(screen)
     cleanup_image(screen.assigns[:image_path])
+    NameBadge.Network.wifi_on()
     :ok
   end
 

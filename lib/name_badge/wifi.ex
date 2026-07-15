@@ -13,19 +13,24 @@ if Mix.target() != :host do
 
     @impl PowerManager
     def power_on(state) do
-      case wifi_module() do
-        {:ok, "rtl8xxxu"} ->
-          pull_down(state)
+      on_level =
+        case wifi_module() do
+          {:ok, "rtl8xxxu"} ->
+            0
 
-        {:ok, "rtw_8723du"} ->
-          pull_up(state)
+          {:ok, "rtw_8723du"} ->
+            1
 
-        _error ->
-          pull_down(state)
-          Logger.warning("NameBadge.Wifi error: no supported wifi modules found")
-      end
+          _error ->
+            Logger.info(
+              "NameBadge.Wifi: no wifi module probed (chip powered off?), assuming rtl8xxxu"
+            )
 
-      {:ok, state, :timer.minutes(2)}
+            0
+        end
+
+      :ok = Circuits.GPIO.write_one(state.gpio, on_level)
+      {:ok, Map.put(state, :on_level, on_level), :timer.minutes(2)}
     end
 
     @impl PowerManager
@@ -35,19 +40,13 @@ if Mix.target() != :host do
 
     @impl PowerManager
     def power_off(state) do
+      off_level = 1 - Map.get(state, :on_level, 0)
+      :ok = Circuits.GPIO.write_one(state.gpio, off_level)
       {:ok, state, :timer.seconds(2)}
     end
 
     @impl PowerManager
     def handle_info(_message, state), do: {:noreply, state}
-
-    defp pull_down(state) do
-      :ok = Circuits.GPIO.write_one(state.gpio, 0)
-    end
-
-    defp pull_up(state) do
-      :ok = Circuits.GPIO.write_one(state.gpio, 1)
-    end
 
     def wifi_module() do
       usb_drivers =

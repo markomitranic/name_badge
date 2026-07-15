@@ -16,6 +16,7 @@ defmodule NameBadge.Spotify.ArtCache do
   use GenServer
   require Logger
 
+  alias NameBadge.Network
   alias NameBadge.Spotify.{Album, Art, Library, Tokens}
 
   @batch_size 10
@@ -42,30 +43,35 @@ defmodule NameBadge.Spotify.ArtCache do
   @impl GenServer
   def init(:ok) do
     File.mkdir_p!(cache_dir())
-    send(self(), :maybe_refill)
     {:ok, %{refill_task: nil, cooldown_until: 0}}
   end
 
+  # A take with no refill in flight also powers WiFi down (a no-op when
+  # it's already off) — the Spotify screen is the only caller, and while
+  # it drives the rotation the chip should only be up during refill bursts.
   @impl GenServer
   def handle_call(:take, _from, state) do
     cover = pop_entry()
-    send(self(), :maybe_refill)
+    state = maybe_refill(state)
+
+    if state.refill_task == nil, do: Network.wifi_off()
+
     {:reply, cover, state}
   end
 
-  @impl GenServer
-  def handle_info(:maybe_refill, state) do
+  defp maybe_refill(state) do
     missing = @batch_size - count_entries()
 
     cond do
-      state.refill_task != nil -> {:noreply, state}
-      System.monotonic_time(:millisecond) < state.cooldown_until -> {:noreply, state}
-      @batch_size - missing >= @low_water -> {:noreply, state}
-      not Tokens.configured?() -> {:noreply, state}
-      true -> {:noreply, start_refill(state, missing)}
+      state.refill_task != nil -> state
+      System.monotonic_time(:millisecond) < state.cooldown_until -> state
+      @batch_size - missing >= @low_water -> state
+      not Tokens.configured?() -> state
+      true -> start_refill(state, missing)
     end
   end
 
+  @impl GenServer
   def handle_info({ref, added}, %{refill_task: %Task{ref: ref}} = state) do
     Process.demonitor(ref, [:flush])
     Logger.info("Spotify art cache refill added #{added} covers")
@@ -138,7 +144,20 @@ defmodule NameBadge.Spotify.ArtCache do
   end
 
   defp refill(count) do
-    Enum.count(1..count, fn _ -> prefetch_one() == :ok end)
+    Network.wifi_on()
+
+    try do
+      case Network.await_internet() do
+        :ok ->
+          Enum.count(1..count, fn _ -> prefetch_one() == :ok end)
+
+        {:error, :timeout} ->
+          Logger.warning("Spotify art refill skipped: no internet")
+          0
+      end
+    after
+      Network.wifi_off()
+    end
   end
 
   defp prefetch_one do

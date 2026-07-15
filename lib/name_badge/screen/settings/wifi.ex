@@ -20,6 +20,7 @@ defmodule NameBadge.Screen.Settings.WiFi do
 
   @impl NameBadge.Screen
   def mount(_args, screen) do
+    NameBadge.Network.wifi_on()
     VintageNetWizard.run_wizard()
     {:ok, screen}
   end
