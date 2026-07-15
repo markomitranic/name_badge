@@ -58,11 +58,13 @@ defmodule NameBadge.MixProject do
       {:nerves_pack, "~> 0.7.1", targets: @all_targets},
       {:circuits_spi, "~> 2.0", targets: @all_targets},
       {:circuits_gpio, "~> 2.1.3", targets: @all_targets},
-      # Grayscale-capable eink: Marko's fork, PR branch toward upstream
-      # `refactor-driver` (calibrated UC8276 4-gray waveform). Swap back to
-      # hex once the PR merges. For live LUT tuning use the local ../eink
-      # clone instead (see NameBadge.GrayTune).
-      {:eink, github: "markomitranic/eink", branch: "uc8276-grayscale-lut", targets: @all_targets},
+      # Grayscale-capable eink: upstream `feat/drawing-pipeline` + our single
+      # calibrated UC8276 4-gray waveform patch on top (branch
+      # `grayscale-on-dp`). Upstream still ships grayscale as an empty stub, so
+      # the fork can't be dropped yet; swap back to hex once upstream cuts a
+      # release with a real grayscale LUT. For live LUT tuning use the local
+      # ../eink clone instead (see NameBadge.GrayTune).
+      {:eink, github: "markomitranic/eink", branch: "grayscale-on-dp", targets: @all_targets},
       {:vintage_net_wizard,
        github: "nerves-networking/vintage_net_wizard", targets: @all_targets},
 
