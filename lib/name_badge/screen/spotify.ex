@@ -4,27 +4,19 @@ defmodule NameBadge.Screen.Spotify do
   Spotify saved library at a time, cassette-tape spine layout (300×300 art
   on the left, vertical separator, artist + album rotated 90° up the right
   side). Rotates every 5 minutes; button A skips to a new album.
+
+  Covers come pre-downloaded and pre-dithered from `NameBadge.Spotify.ArtCache`,
+  so rotation itself never touches the network.
   """
 
   use NameBadge.Screen
 
   require Logger
 
-  alias NameBadge.Spotify.{Album, Library, Tokens}
+  alias NameBadge.Spotify.{ArtCache, Tokens}
 
   @rotate_interval :timer.minutes(5)
   @retry_interval :timer.seconds(30)
-  @image_timeout 10_000
-
-  # Art is rendered into a 300x300 pt slot in the Typst template, which at
-  # Typst's default 72dpi is 300x300 px. Pre-resizing to exactly that avoids
-  # a second resample inside Typst that would blur the dithered pattern.
-  @art_size 300
-
-  # Atkinson preserves mid-tone structure with less granular noise than
-  # Floyd-Steinberg — good for album art on this panel. Swap to
-  # :atkinson / :floyd_steinberg / :sierra / :stucki / :burkes / :jarvis to taste.
-  @dither_algorithm :stucki
 
   @impl NameBadge.Screen
   def mount(_args, screen) do
@@ -68,22 +60,6 @@ defmodule NameBadge.Screen.Spotify do
       #text(size: 12pt, fill: gray)[Set SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET,
       and SPOTIFY_REFRESH_TOKEN in .mise.local.toml,]
       #text(size: 12pt, fill: gray)[then reflash.]
-    ]
-    """
-  end
-
-  def render(%{status: :empty_library}) do
-    """
-    #show heading: set text(font: "Silkscreen", size: 32pt, weight: 400, tracking: -4pt)
-
-    = Spotify
-
-    #v(16pt)
-
-    #align(center + horizon)[
-      #text(size: 18pt)[No albums found.]
-      #v(4pt)
-      #text(size: 12pt, fill: gray)[Save some albums to your Spotify library.]
     ]
     """
   end
@@ -145,122 +121,26 @@ defmodule NameBadge.Screen.Spotify do
   # ---- Rotation ----
 
   defp do_rotate(screen) do
-    if Tokens.configured?() do
-      case Library.random_album() do
-        %Album{image_url: url} = album when is_binary(url) ->
-          case fetch_image(url) do
-            {:ok, path} ->
-              cleanup_image(screen.assigns[:image_path])
+    cond do
+      not Tokens.configured?() ->
+        assign(screen, status: :unauthorized)
 
-              screen
-              |> assign(
-                image_path: path,
-                artist: album.artist,
-                album: album.name,
-                status: :ok
-              )
-              |> schedule_rotate(@rotate_interval)
+      cover = ArtCache.take() ->
+        show_cover(screen, cover)
 
-            {:error, reason} ->
-              Logger.warning("Album image fetch failed: #{inspect(reason)}")
-              schedule_rotate(screen, @retry_interval)
-          end
-
-        _ ->
-          screen
-          |> assign(status: :empty_library)
-          |> schedule_rotate(@retry_interval)
-      end
-    else
-      assign(screen, status: :unauthorized)
+      true ->
+        schedule_rotate(screen, @retry_interval)
     end
   end
 
-  defp fetch_image(url) do
-    case Req.get(url, receive_timeout: @image_timeout, decode_body: false) do
-      {:ok, %{status: 200, body: body}} when is_binary(body) ->
-        case preprocess_art(body) do
-          {:ok, png} ->
-            path = Path.join(tmp_root(), "album_#{System.unique_integer([:positive])}.png")
-            File.write!(path, png)
-            {:ok, path}
+  defp show_cover(screen, %{png: png, artist: artist, album: album}) do
+    path = Path.join(tmp_root(), "album_#{System.unique_integer([:positive])}.png")
+    File.write!(path, png)
+    cleanup_image(screen.assigns[:image_path])
 
-          {:error, reason} ->
-            {:error, reason}
-        end
-
-      {:ok, %{status: status}} ->
-        {:error, {:http, status}}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  # Resize to the exact display slot, stretch the histogram so dark covers
-  # don't dither to a flat grey, then run error-diffusion dithering to 2 bits
-  # (4 gray levels). The resulting pixels are exactly {0, 85, 170, 255}, which
-  # the grayscale draw path maps 1:1 onto the panel's 4 calibrated levels.
-  defp preprocess_art(body) do
-    try do
-      image =
-        body
-        |> Dither.decode!()
-        |> Dither.resize!(@art_size, @art_size)
-        |> Dither.grayscale!()
-
-      raw =
-        image
-        |> Dither.to_raw!()
-        |> stretch_contrast()
-
-      png =
-        raw
-        |> Dither.from_raw!(@art_size, @art_size)
-        |> Dither.dither!(algorithm: @dither_algorithm, bit_depth: 2)
-        |> Dither.encode!()
-
-      {:ok, png}
-    rescue
-      e -> {:error, e}
-    end
-  end
-
-  # Linearly rescale grayscale bytes so the darkest pixel maps to 0 and the
-  # brightest to 255. A tiny percentile clip keeps outlier pixels from
-  # suppressing the stretch on nearly-monochrome covers.
-  defp stretch_contrast(raw) when is_binary(raw) do
-    {lo, hi} = percentile_bounds(raw, 0.01, 0.99)
-    range = max(hi - lo, 1)
-
-    for <<b <- raw>>, into: <<>> do
-      scaled = trunc((max(min(b, hi), lo) - lo) * 255 / range)
-      <<scaled>>
-    end
-  end
-
-  defp percentile_bounds(raw, low_p, high_p) do
-    histogram =
-      Enum.reduce(0..255, %{}, fn v, acc -> Map.put(acc, v, 0) end)
-
-    histogram =
-      for <<b <- raw>>, reduce: histogram do
-        acc -> Map.update!(acc, b, &(&1 + 1))
-      end
-
-    total = byte_size(raw)
-    low_target = trunc(total * low_p)
-    high_target = trunc(total * high_p)
-
-    {lo, hi, _} =
-      Enum.reduce(0..255, {0, 255, 0}, fn v, {lo, hi, cum} ->
-        cum = cum + Map.get(histogram, v, 0)
-        lo = if cum <= low_target, do: v, else: lo
-        hi = if cum <= high_target, do: v, else: hi
-        {lo, hi, cum}
-      end)
-
-    {lo, hi}
+    screen
+    |> assign(image_path: path, artist: artist, album: album, status: :ok)
+    |> schedule_rotate(@rotate_interval)
   end
 
   defp cleanup_image(nil), do: :ok

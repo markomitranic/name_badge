@@ -32,8 +32,10 @@ defmodule NameBadge.Application do
       NameBadge.DisplayMock,
       NameBadge.BatteryMock,
       NameBadge.TimezoneService,
+      {Task.Supervisor, name: NameBadge.TaskSupervisor},
       NameBadge.Spotify.Tokens,
       NameBadge.Spotify.Library,
+      NameBadge.Spotify.ArtCache,
       NameBadge.ScreenManager,
       {PhoenixPlayground, live: NameBadge.PreviewLive}
     ]
@@ -49,8 +51,10 @@ defmodule NameBadge.Application do
       EInk,
       NameBadge.Display,
       NameBadge.TimezoneService,
+      {Task.Supervisor, name: NameBadge.TaskSupervisor},
       NameBadge.Spotify.Tokens,
       NameBadge.Spotify.Library,
+      NameBadge.Spotify.ArtCache,
       NameBadge.ScreenManager
     ]
   end

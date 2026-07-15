@@ -161,8 +161,9 @@ The screen only appears in the top-level menu when all three `SPOTIFY_*` env var
 
 - `/data/spotify_tokens.json` — holds any refresh token Spotify rotates (survives reboot; falls back to the env-var value on wipe).
 - `/data/spotify_library.json` — cached album list (refreshed every 24 h, re-fetched on boot if stale).
+- `/data/spotify_art/` — queue of prefetched, pre-dithered covers (`<id>.png` + `<id>.json` pairs). Refilled in batches of 10 when it drops below 3, so rotation never blocks on the network.
 
-**Modules**: `NameBadge.Spotify.{Tokens, HTTP, Library, Album}` + `NameBadge.Screen.Spotify`.
+**Modules**: `NameBadge.Spotify.{Tokens, HTTP, Library, Album, Art, ArtCache}` + `NameBadge.Screen.Spotify`.
 
 **Grayscale**: the screen renders in 4-level grayscale (`mode: :grayscale`, art dithered at `bit_depth: 2`). The hand-calibrated UC8276 register waveform lives in the `eink` dep — Marko's fork, branch `uc8276-grayscale-lut`, PR [protolux-electronics/eink#11](https://github.com/protolux-electronics/eink/pull/11) toward upstream `refactor-driver`; swap `mix.exs` back to hex once merged. Screens opt into draw options via a `render_opts` assign (see `NameBadge.Screen`). Calibration method + harness: `NameBadge.GrayTune` moduledocs and `scripts/gray_calibration.html` (photo-measurement tool); live re-tuning additionally needs the local `../eink` clone as a path dep with the `gc4_tune` scaffolding (stashed on its `feat/drawing-pipeline` branch).
 
