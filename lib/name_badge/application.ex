@@ -44,6 +44,9 @@ defmodule NameBadge.Application do
       button_spec(:button_1),
       button_spec(:button_2),
       NameBadge.Battery,
+      # EInk singleton (configured via `config :eink`) must start before Display,
+      # which draws the boot frame through it.
+      EInk,
       NameBadge.Display,
       NameBadge.TimezoneService,
       NameBadge.Spotify.Tokens,

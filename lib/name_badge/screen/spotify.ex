@@ -22,7 +22,7 @@ defmodule NameBadge.Screen.Spotify do
   @art_size 300
 
   # Atkinson preserves mid-tone structure with less granular noise than
-  # Floyd-Steinberg — good for album art on a 1-bit panel. Swap to
+  # Floyd-Steinberg — good for album art on this panel. Swap to
   # :atkinson / :floyd_steinberg / :sierra / :stucki / :burkes / :jarvis to taste.
   @dither_algorithm :stucki
 
@@ -40,6 +40,11 @@ defmodule NameBadge.Screen.Spotify do
         rotate_timer: timer
       )
       |> assign(button_hints: %{a: "New"})
+      # 4-level grayscale via the calibrated UC8276 register waveform. Art is
+      # pre-dithered to exact {0, 85, 170, 255} values below, so eink's own
+      # dithering is disabled — those values map losslessly onto the 4 levels
+      # and text edges stay crisp.
+      |> assign(render_opts: [mode: :grayscale, dither: false])
 
     {:ok, screen}
   end
@@ -193,9 +198,9 @@ defmodule NameBadge.Screen.Spotify do
   end
 
   # Resize to the exact display slot, stretch the histogram so dark covers
-  # don't dither to a flat grey, then run error-diffusion dithering to 1 bit.
-  # The resulting PNG is already binary, so the Display's hard-threshold at
-  # render time is a no-op on these pixels.
+  # don't dither to a flat grey, then run error-diffusion dithering to 2 bits
+  # (4 gray levels). The resulting pixels are exactly {0, 85, 170, 255}, which
+  # the grayscale draw path maps 1:1 onto the panel's 4 calibrated levels.
   defp preprocess_art(body) do
     try do
       image =
@@ -212,7 +217,7 @@ defmodule NameBadge.Screen.Spotify do
       png =
         raw
         |> Dither.from_raw!(@art_size, @art_size)
-        |> Dither.dither!(algorithm: @dither_algorithm, bit_depth: 1)
+        |> Dither.dither!(algorithm: @dither_algorithm, bit_depth: 2)
         |> Dither.encode!()
 
       {:ok, png}

@@ -164,6 +164,8 @@ The screen only appears in the top-level menu when all three `SPOTIFY_*` env var
 
 **Modules**: `NameBadge.Spotify.{Tokens, HTTP, Library, Album}` + `NameBadge.Screen.Spotify`.
 
+**Grayscale**: the screen renders in 4-level grayscale (`mode: :grayscale`, art dithered at `bit_depth: 2`). The hand-calibrated UC8276 register waveform lives in the `eink` dep — Marko's fork, branch `uc8276-grayscale-lut`, PR [protolux-electronics/eink#11](https://github.com/protolux-electronics/eink/pull/11) toward upstream `refactor-driver`; swap `mix.exs` back to hex once merged. Screens opt into draw options via a `render_opts` assign (see `NameBadge.Screen`). Calibration method + harness: `NameBadge.GrayTune` moduledocs and `scripts/gray_calibration.html` (photo-measurement tool); live re-tuning additionally needs the local `../eink` clone as a path dep with the `gc4_tune` scaffolding (stashed on its `feat/drawing-pipeline` branch).
+
 ## Gotchas Worth Remembering
 
 - **Screen templates are Typst, not EEx.** Use Elixir string interpolation `#{var}`; `<%= %>` will crash the renderer. A leading `#` on the first Typst line also crashes it.
