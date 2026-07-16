@@ -37,17 +37,25 @@ defmodule NameBadge.Network do
     @doc """
     Hard-powers the WiFi chip off (cuts the WIFI_EN line via the VintageNet
     power manager). Stashes the current runtime config so `wifi_on/0` can
-    restore it. No-op when WiFi is already off.
+    restore it. No-op when WiFi is already off, and refused entirely while
+    USB-powered — on external power WiFi always stays on.
 
     @example `Network.wifi_off() // :ok`
     """
     def wifi_off() do
       config = VintageNet.get_configuration("wlan0")
 
-      unless match?(%{type: VintageNet.Technology.Null}, config) do
-        :persistent_term.put({__MODULE__, :wifi_config}, config)
-        Logger.info("Network: powering WiFi off")
-        VintageNet.deconfigure("wlan0", persist: false)
+      cond do
+        match?(%{type: VintageNet.Technology.Null}, config) ->
+          :ok
+
+        NameBadge.Battery.charging?() ->
+          Logger.info("Network: WiFi stays on (USB-powered)")
+
+        true ->
+          :persistent_term.put({__MODULE__, :wifi_config}, config)
+          Logger.info("Network: powering WiFi off")
+          VintageNet.deconfigure("wlan0", persist: false)
       end
 
       :ok
@@ -79,6 +87,21 @@ defmodule NameBadge.Network do
           Process.sleep(1_000)
           poll_internet(deadline)
       end
+    end
+  end
+
+  if Mix.target() == :host do
+    def wifi_present?(), do: true
+  else
+    @doc """
+    Whether the WiFi chip is physically powered and enumerated (wlan0 exists).
+    Tracks the WIFI_EN hard power-off, unlike the `connection` property which
+    flips as soon as a deconfigure is requested.
+
+    @example `Network.wifi_present?() // false`
+    """
+    def wifi_present?() do
+      VintageNet.get(["interface", "wlan0", "present"]) == true
     end
   end
 

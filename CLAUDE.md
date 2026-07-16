@@ -165,20 +165,26 @@ The screen only appears in the top-level menu when all three `SPOTIFY_*` env var
 
 **Modules**: `NameBadge.Spotify.{Tokens, HTTP, Library, Album, Art, ArtCache}` + `NameBadge.Screen.Spotify`.
 
+**Spine extras**: a small wifi/wifi-slash icon in the bottom-right corner shows the chip's live power state (driven by the VintageNet `present` property; a state flip re-renders the cover). Text falls back per-glyph from Poppins to the bundled `Noto Sans JP` for Japanese titles — note the **host simulator also loads macOS system fonts**, so Japanese rendering can only be truly verified on the badge. Every draw is preceded by a white flush (`anti_ghost: true` render opt handled in `NameBadge.Display`, ~1 s extra) to clear grayscale-mid ghosting.
+
+**Host smoke tests** (no device needed): `MIX_TARGET=host mix run scripts/test_typst_composition.exs` renders the real spine template (Latin/æøå/Japanese cases) to `/tmp/spotify_composition_test_*.png`; `SPOTIFY_CLIENT_ID=fake SPOTIFY_CLIENT_SECRET=fake SPOTIFY_REFRESH_TOKEN=fake MIX_TARGET=host mix run scripts/test_art_cache.exs` drains a seeded cache and asserts the refill triggers at the right take. Both boot the full host app (including the LiveView preview server) as a side effect.
+
 **Grayscale**: the screen renders in 4-level grayscale (`mode: :grayscale`, art dithered at `bit_depth: 2`). The hand-calibrated UC8276 register waveform lives in the `eink` dep — Marko's fork, branch `uc8276-grayscale-lut`, PR [protolux-electronics/eink#11](https://github.com/protolux-electronics/eink/pull/11) toward upstream `refactor-driver`; swap `mix.exs` back to hex once merged. Screens opt into draw options via a `render_opts` assign (see `NameBadge.Screen`). Calibration method + harness: `NameBadge.GrayTune` moduledocs and `scripts/gray_calibration.html` (photo-measurement tool); live re-tuning additionally needs the local `../eink` clone as a path dep with the `gc4_tune` scaffolding (stashed on its `feat/drawing-pipeline` branch).
 
 ## Power Management
 
-The WiFi chip (~3/4 of idle battery drain, measured 2026-07) can be hard-powered-off via the `WIFI_EN` GPIO — `NameBadge.Wifi.power_off/1` drives the pin when VintageNet deconfigures `wlan0`. The policy is deliberately dumb — no scheduler, apps flip the switch themselves:
+The WiFi chip (~3/4 of idle battery drain, measured 2026-07 — caveat: that measurement predates the actual GPIO fix, so it captured a software disassociate only; the true hard-off saving is still unmeasured, see `scripts/power_mark.sh`) can be hard-powered-off via the `WIFI_EN` GPIO — `NameBadge.Wifi.power_off/1` drives the pin when VintageNet deconfigures `wlan0`. The policy is deliberately dumb — no scheduler, apps flip the switch themselves:
 
 - **WiFi is on by default, always** — from boot, on every screen except Spotify.
-- `NameBadge.Network.wifi_on/0` / `wifi_off/0` toggle it at runtime (the persisted config is never touched, so a reboot always comes back online). `await_internet/1` blocks until `:internet`.
-- **The Spotify screen is the only thing that turns WiFi off**: covers rotate from the prefetched `ArtCache` with the chip dark, each refill burst powers it up for ~a minute every ~35 min, and **exiting the screen turns it back on**.
+- **On USB power WiFi never turns off**: `Network.wifi_off/0` refuses while `Battery.charging?()` (voltage > 4.5 V — threshold not yet verified on hardware), and `NameBadge.PowerMonitor` powers WiFi back on when USB is plugged in. Unplugging doesn't turn it off; the next app-driven `wifi_off` does.
+- `NameBadge.Network.wifi_on/0` / `wifi_off/0` toggle it at runtime (the persisted config is never touched, so a reboot always comes back online). `wifi_off` takes effect within ~seconds — the VintageNet power-on hold time is 10 s, down from the original 2 min "grace period". `await_internet/1` blocks until `:internet`; `wifi_present?/0` reports whether the chip is physically up.
+- **The Spotify screen is the only thing that turns WiFi off**: covers rotate from the prefetched `ArtCache` with the chip dark, each refill burst powers it up for ~a minute every ~35 min, and **exiting the screen turns it back on** (`ArtCache` monitors its caller, so a burst that outlives the screen leaves WiFi on instead of cutting it under the next screen).
 - **Settings → WiFi** turns WiFi on (for the setup wizard's AP mode).
 
 ## Gotchas Worth Remembering
 
-- **WiFi is off while the Spotify screen is showing** (except during refill bursts) — even when USB-powered. To SSH: exit the screen, or use the USB cable (SSH over `usb0` works regardless of WiFi).
+- **WiFi is off while the Spotify screen is showing on battery** (except during refill bursts). On USB power it stays on. To SSH to a wifi-dark badge: exit the screen, plug in USB power, or use the USB cable directly (SSH over `usb0` works regardless of WiFi).
+- **BEAM monotonic time is negative** (starts around −576×10⁹ ms). Never compare `System.monotonic_time/1` against a literal `0` deadline — it reads as "deadline passed 18 years from now". This exact bug silently disabled ArtCache refills once already.
 
 - **Screen templates are Typst, not EEx.** Use Elixir string interpolation `#{var}`; `<%= %>` will crash the renderer. A leading `#` on the first Typst line also crashes it.
 - **Status bar is built in `lib/name_badge/layout.ex` `icons_markup/0`.** It's a Typst `#place(top + right, …)` with a `stack(dir: ltr, …)` of `image("images/icons/*.png")` calls. To add an icon: drop a ~16 pt PNG into `priv/typst/images/icons/` and add one `image(...)` line in the stack.

@@ -17,10 +17,12 @@ defmodule NameBadge.Screen.Spotify do
 
   @rotate_interval :timer.minutes(5)
   @retry_interval :timer.seconds(30)
+  @wlan0_present ["interface", "wlan0", "present"]
 
   @impl NameBadge.Screen
   def mount(_args, screen) do
     timer = Process.send_after(self(), :rotate, 50)
+    NameBadge.Network.subscribe(@wlan0_present)
 
     screen =
       screen
@@ -29,21 +31,24 @@ defmodule NameBadge.Screen.Spotify do
         artist: nil,
         album: nil,
         status: :loading,
-        rotate_timer: timer
+        rotate_timer: timer,
+        wifi: NameBadge.Network.wifi_present?()
       )
       |> assign(button_hints: %{a: "New"})
       # 4-level grayscale via the calibrated UC8276 register waveform. Art is
       # pre-dithered to exact {0, 85, 170, 255} values below, so eink's own
       # dithering is disabled — those values map losslessly onto the 4 levels
-      # and text edges stay crisp.
-      |> assign(render_opts: [mode: :grayscale, dither: false])
+      # and text edges stay crisp. anti_ghost flushes the panel white before
+      # every draw to clear grayscale-mid ghosting from the previous cover.
+      |> assign(render_opts: [mode: :grayscale, dither: false, anti_ghost: true])
 
     {:ok, screen}
   end
 
   @impl NameBadge.Screen
-  def render(%{image_path: path, artist: artist, album: album}) when is_binary(path) do
-    compose_png(path, artist, album)
+  def render(%{image_path: path, artist: artist, album: album, wifi: wifi})
+      when is_binary(path) do
+    compose_png(path, artist, album, wifi)
   end
 
   def render(%{status: :unauthorized}) do
@@ -93,6 +98,13 @@ defmodule NameBadge.Screen.Spotify do
     screen = %{screen | assigns: Map.put(screen.assigns, :rotate_timer, nil)}
     screen = do_rotate(screen)
     {:noreply, screen}
+  end
+
+  # The wifi indicator tracks the chip's actual power state; a change
+  # re-renders the current cover with the updated icon (assign diffing in
+  # NameBadge.Screen skips the redraw when nothing changed).
+  def handle_info({VintageNet, @wlan0_present, _old, present, _meta}, screen) do
+    {:noreply, assign(screen, wifi: present == true)}
   end
 
   def handle_info(_msg, screen), do: {:noreply, screen}
@@ -153,12 +165,25 @@ defmodule NameBadge.Screen.Spotify do
 
   # ---- Typst composition ----
 
-  defp compose_png(image_path, artist, album) do
+  @doc """
+  Renders the cassette-spine layout to a PNG binary: cover art left, vertical
+  separator, artist + album rotated up the right side, wifi indicator in the
+  bottom-right corner. "Noto Sans JP" only kicks in per-glyph for characters
+  Poppins lacks (Japanese titles used to render as tofu boxes).
+
+  Public so `scripts/test_typst_composition.exs` can smoke-test the real
+  template on the host.
+
+  @example `Spotify.compose_png(path, "Nirvana", "In Utero", false) // <<PNG>>`
+  """
+  def compose_png(image_path, artist, album, wifi?) do
+    copy_icons()
     filename = Path.basename(image_path)
+    wifi_icon = if wifi?, do: "wifi.png", else: "wifi-slash.png"
 
     template = """
     #set page(width: 400pt, height: 300pt, margin: 0pt)
-    #set text(font: "Poppins")
+    #set text(font: ("Poppins", "Noto Sans JP"))
 
     #grid(
       columns: (300pt, 1pt, 99pt),
@@ -174,12 +199,26 @@ defmodule NameBadge.Screen.Spotify do
         ]
       ))
     )
+
+    #place(bottom + right, dx: -6pt, dy: -6pt, image("icons/#{wifi_icon}", width: 12pt))
     """
 
     typst_opts = [root_dir: tmp_root(), extra_fonts: [fonts_dir()]]
 
     Typst.render_to_png!(template, [], typst_opts)
     |> List.first()
+  end
+
+  defp copy_icons do
+    src = Application.app_dir(:name_badge, "priv/typst/images/icons")
+    dest = Path.join(tmp_root(), "icons")
+    File.mkdir_p!(dest)
+
+    for icon <- ["wifi.png", "wifi-slash.png"] do
+      File.cp!(Path.join(src, icon), Path.join(dest, icon))
+    end
+
+    :ok
   end
 
   # Escape Typst markup special chars so artist/album text renders as plain

@@ -30,7 +30,11 @@ if Mix.target() != :host do
         end
 
       :ok = Circuits.GPIO.write_one(state.gpio, on_level)
-      {:ok, Map.put(state, :on_level, on_level), :timer.minutes(2)}
+
+      # power_on_hold_time: VintageNet delays any power-off until this much
+      # on-time has elapsed. Keep it just long enough for USB enumeration so
+      # Network.wifi_off/0 acts immediately instead of lingering for minutes.
+      {:ok, Map.put(state, :on_level, on_level), :timer.seconds(10)}
     end
 
     @impl PowerManager

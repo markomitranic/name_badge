@@ -46,6 +46,7 @@ defmodule NameBadge.Application do
       button_spec(:button_1),
       button_spec(:button_2),
       NameBadge.Battery,
+      NameBadge.PowerMonitor,
       # EInk singleton (configured via `config :eink`) must start before Display,
       # which draws the boot frame through it.
       EInk,

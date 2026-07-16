@@ -11,13 +11,16 @@ defmodule NameBadge.Display do
   Render a Typst template to the display.
 
   `opts` are passed straight to `EInk.draw/2` — notably `mode: :full | :fast | :grayscale`.
+  `anti_ghost: true` flushes the panel white before the draw (~1 extra second)
+  to clear residue the previous image left in the grayscale mids.
   """
   def render_typst(markup, opts \\ []) do
     GenServer.call(__MODULE__, {:render_typst, markup, opts})
   end
 
   @doc """
-  Render a PNG (binary or Dither ref) to the display. `opts` forwarded to `EInk.draw/2`.
+  Render a PNG (binary or Dither ref) to the display. `opts` forwarded to
+  `EInk.draw/2`, except `anti_ghost` (see `render_typst/2`).
   """
   def render_png(png, opts \\ []) do
     GenServer.call(__MODULE__, {:render_png, png, opts})
@@ -41,7 +44,7 @@ defmodule NameBadge.Display do
   def handle_call({:render_typst, markup, opts}, _from, state) do
     eval_template(markup)
     |> Dither.decode!()
-    |> EInk.draw(opts)
+    |> draw(opts)
 
     {:reply, :ok, state}
   end
@@ -49,9 +52,16 @@ defmodule NameBadge.Display do
   @impl GenServer
   def handle_call({:render_png, png, opts}, _from, state) do
     to_dither(png)
-    |> EInk.draw(opts)
+    |> draw(opts)
 
     {:reply, :ok, state}
+  end
+
+  defp draw(image, opts) do
+    {anti_ghost?, opts} = Keyword.pop(opts, :anti_ghost, false)
+
+    if anti_ghost?, do: EInk.clear(:white, opts)
+    EInk.draw(image, opts)
   end
 
   # EInk.draw treats a raw binary as already-packed pixel data, so PNG bytes must

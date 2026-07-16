@@ -43,44 +43,70 @@ defmodule NameBadge.Spotify.ArtCache do
   @impl GenServer
   def init(:ok) do
     File.mkdir_p!(cache_dir())
-    {:ok, %{refill_task: nil, cooldown_until: 0}}
+    {:ok, %{refill_task: nil, cooldown_until: nil, consumer: nil, consumer_ref: nil}}
   end
 
   # A take with no refill in flight also powers WiFi down (a no-op when
   # it's already off) — the Spotify screen is the only caller, and while
   # it drives the rotation the chip should only be up during refill bursts.
+  # The caller is monitored so a refill burst that outlives the screen
+  # leaves WiFi alone instead of cutting it under the next screen.
   @impl GenServer
-  def handle_call(:take, _from, state) do
+  def handle_call(:take, {caller, _tag}, state) do
+    state = track_consumer(state, caller)
     cover = pop_entry()
     state = maybe_refill(state)
 
     if state.refill_task == nil, do: Network.wifi_off()
 
+    Logger.info("Spotify art cache: #{count_entries()} covers on disk after take")
+
     {:reply, cover, state}
   end
 
+  defp track_consumer(%{consumer: pid} = state, pid), do: state
+
+  defp track_consumer(state, pid) do
+    if state.consumer_ref, do: Process.demonitor(state.consumer_ref, [:flush])
+    %{state | consumer: pid, consumer_ref: Process.monitor(pid)}
+  end
+
+  # cooldown_until is a monotonic-clock deadline or nil. It must never be
+  # compared against a literal 0 — BEAM monotonic time starts hugely negative,
+  # so 0 would read as "in cooldown" for the first ~18 years of uptime.
   defp maybe_refill(state) do
     missing = @batch_size - count_entries()
 
     cond do
       state.refill_task != nil -> state
-      System.monotonic_time(:millisecond) < state.cooldown_until -> state
+      in_cooldown?(state) -> state
       @batch_size - missing >= @low_water -> state
       not Tokens.configured?() -> state
       true -> start_refill(state, missing)
     end
   end
 
+  defp in_cooldown?(%{cooldown_until: nil}), do: false
+
+  defp in_cooldown?(%{cooldown_until: deadline}) do
+    System.monotonic_time(:millisecond) < deadline
+  end
+
+  # WiFi goes back down when the burst ends — but only if the Spotify screen
+  # is still alive. If the user left mid-refill, the exit already turned WiFi
+  # on and this must not undo it.
   @impl GenServer
   def handle_info({ref, added}, %{refill_task: %Task{ref: ref}} = state) do
     Process.demonitor(ref, [:flush])
     Logger.info("Spotify art cache refill added #{added} covers")
 
+    if state.consumer, do: Network.wifi_off()
+
     cooldown =
       if added == 0 do
         System.monotonic_time(:millisecond) + @failure_cooldown
       else
-        0
+        nil
       end
 
     {:noreply, %{state | refill_task: nil, cooldown_until: cooldown}}
@@ -88,8 +114,13 @@ defmodule NameBadge.Spotify.ArtCache do
 
   def handle_info({:DOWN, ref, :process, _pid, reason}, %{refill_task: %Task{ref: ref}} = state) do
     Logger.warning("Spotify art cache refill crashed: #{inspect(reason)}")
+    if state.consumer, do: Network.wifi_off()
     cooldown = System.monotonic_time(:millisecond) + @failure_cooldown
     {:noreply, %{state | refill_task: nil, cooldown_until: cooldown}}
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{consumer_ref: ref} = state) do
+    {:noreply, %{state | consumer: nil, consumer_ref: nil}}
   end
 
   def handle_info(_msg, state), do: {:noreply, state}
@@ -146,17 +177,13 @@ defmodule NameBadge.Spotify.ArtCache do
   defp refill(count) do
     Network.wifi_on()
 
-    try do
-      case Network.await_internet() do
-        :ok ->
-          Enum.count(1..count, fn _ -> prefetch_one() == :ok end)
+    case Network.await_internet() do
+      :ok ->
+        Enum.count(1..count, fn _ -> prefetch_one() == :ok end)
 
-        {:error, :timeout} ->
-          Logger.warning("Spotify art refill skipped: no internet")
-          0
-      end
-    after
-      Network.wifi_off()
+      {:error, :timeout} ->
+        Logger.warning("Spotify art refill skipped: no internet")
+        0
     end
   end
 
