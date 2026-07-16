@@ -21,13 +21,13 @@ unless File.exists?(test_image) do
 end
 
 cases = [
-  {"latin", "Miles Davis", "Kind of Blue", true},
-  {"scandinavian", "Bjørn Sæther", "Blåbærsyltetøy på låven", false},
-  {"japanese", "坂本龍一", "async (アシンク)", false}
+  {"latin", "Miles Davis", "Kind of Blue"},
+  {"scandinavian", "Bjørn Sæther", "Blåbærsyltetøy på låven"},
+  {"japanese", "坂本龍一", "async (アシンク)"}
 ]
 
-for {name, artist, album, wifi?} <- cases do
-  png = NameBadge.Screen.Spotify.compose_png(test_image, artist, album, wifi?)
+for {name, artist, album} <- cases do
+  png = NameBadge.Screen.Spotify.compose_png(test_image, artist, album)
   out = "/tmp/spotify_composition_test_#{name}.png"
   File.write!(out, png)
   IO.puts("OK — #{name}: #{byte_size(png)} bytes → #{out}")
