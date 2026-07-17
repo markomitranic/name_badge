@@ -124,28 +124,18 @@ defmodule NameBadge.Application do
     ]
   end
 
+  # POWER TEST BRANCH: everything except battery + display + the experiment is
+  # deliberately not started, so the measurement sees only background noise.
+  # No buttons, no screens — power-cycle is the only manual exit.
   defp target_children(_target) do
     [
-      button_spec(:button_1),
-      button_spec(:button_2),
       NameBadge.Battery,
-      NameBadge.PowerMonitor,
       # EInk singleton (configured via `config :eink`) must start before Display,
       # which draws the boot frame through it.
       EInk,
       NameBadge.Display,
-      NameBadge.TimezoneService,
-      {Task.Supervisor, name: NameBadge.TaskSupervisor},
-      NameBadge.Spotify.Tokens,
-      NameBadge.Spotify.Library,
-      NameBadge.Spotify.ArtCache,
-      NameBadge.ScreenManager
+      NameBadge.PowerTest
     ]
-  end
-
-  defp button_spec(button_name, opts \\ []) do
-    spec = {NameBadge.ButtonMonitor, Keyword.put(opts, :button, button_name)}
-    Supervisor.child_spec(spec, id: button_name)
   end
 
   if Mix.target() == :host do
