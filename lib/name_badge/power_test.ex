@@ -65,13 +65,23 @@ defmodule NameBadge.PowerTest do
         = CPU core A/B test armed
         Unplug USB to start.
 
-        3 min settle, then legs of 18 min: A (2 cores), B (1 core), A again. WiFi is off for the whole run, total 57 min.
+        3 min settle, then legs of 18 min: A (2 cores), B (1 core), A again. WiFi is off for the whole run, total 58 min.
 
-        The screen will announce the verdict. Plugging USB back in aborts.
+        After unplugging, one "test running" frame appears, then the display stays frozen until the verdict at the end. Plugging USB back in aborts.
         """)
 
         wait_for_unplug()
         File.write!(@state_file, "running")
+
+        screen("""
+        = Test running
+        Started #{Calendar.strftime(DateTime.utc_now(), "%H:%M")} UTC.
+
+        This screen stays frozen for the whole run (redraws would spoil the measurement). The verdict appears here in about 58 minutes.
+
+        Plugging USB back in aborts.
+        """)
+
         execute()
     end
 
