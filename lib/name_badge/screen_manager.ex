@@ -19,6 +19,7 @@ defmodule NameBadge.ScreenManager do
 
   @impl GenServer
   def init(_opts) do
+    Process.flag(:trap_exit, true)
     initial_stack = [Screen.TopLevel]
 
     {:ok, pid} = Screen.start_link(module: hd(initial_stack))
@@ -48,4 +49,18 @@ defmodule NameBadge.ScreenManager do
         {:noreply, %{state | stack: new_stack, current_screen: pid}}
     end
   end
+
+  # A crashed screen skips its terminate/2 (where Spotify restores WiFi),
+  # so recover deliberately: log the reason, put WiFi back on, go home.
+  @impl GenServer
+  def handle_info({:EXIT, pid, reason}, %{current_screen: pid} = state)
+      when reason not in [:normal, :shutdown] do
+    Logger.error("Screen #{inspect(hd(state.stack))} crashed: #{inspect(reason)}")
+    NameBadge.Network.wifi_on()
+
+    {:ok, new_pid} = Screen.start_link(module: Screen.TopLevel)
+    {:noreply, %{state | stack: [Screen.TopLevel], current_screen: new_pid}}
+  end
+
+  def handle_info({:EXIT, _stale_screen, _reason}, state), do: {:noreply, state}
 end

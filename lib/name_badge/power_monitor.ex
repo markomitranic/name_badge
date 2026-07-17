@@ -1,11 +1,12 @@
 defmodule NameBadge.PowerMonitor do
   @moduledoc """
-  Turns WiFi back on the moment USB power is plugged in.
+  Keeps WiFi on whenever USB power is present.
 
   Complements the "WiFi never turns off while USB-powered" guard in
   `NameBadge.Network.wifi_off/0`: the guard covers power-off attempts while
-  charging, this monitor covers plugging in after something (the Spotify
-  screen) already powered the chip down.
+  charging, this monitor covers the chip being off while charging for any
+  other reason — plugged in after the Spotify screen powered it down, or
+  stranded off by a crash that skipped the screen's terminate callback.
   """
 
   use GenServer
@@ -17,15 +18,15 @@ defmodule NameBadge.PowerMonitor do
   @impl GenServer
   def init(_opts) do
     :timer.send_interval(@poll_interval, :poll)
-    {:ok, %{charging?: NameBadge.Battery.charging?()}}
+    {:ok, nil}
   end
 
   @impl GenServer
   def handle_info(:poll, state) do
-    charging? = NameBadge.Battery.charging?()
+    if NameBadge.Battery.charging?() and not NameBadge.Network.wifi_present?() do
+      NameBadge.Network.wifi_on()
+    end
 
-    if charging? and not state.charging?, do: NameBadge.Network.wifi_on()
-
-    {:noreply, %{state | charging?: charging?}}
+    {:noreply, state}
   end
 end

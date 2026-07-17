@@ -55,7 +55,16 @@ config :nerves_ssh,
 # See https://github.com/nerves-networking/vintage_net for more information
 config :vintage_net,
   regulatory_domain: "00",
-  power_managers: [{NameBadge.Wifi, [gpio: "WIFI_EN", ifname: "wlan0"]}],
+  # The watchdog only runs while the chip is powered (the PM state machine is
+  # dormant in :off), and is pet whenever connectivity is >= :lan — so it only
+  # fires after 10 straight minutes powered-but-disconnected, i.e. a genuinely
+  # hung chip on an always-on screen. The 60s default was too impatient: it reset
+  # the chip ~70s after boot (10s power-on hold + 60s) when association was slow.
+  # Spotify's ~1 min refill bursts never come near 10 min, and each burst is a
+  # hard power cycle anyway, so bursts self-heal without the watchdog.
+  power_managers: [
+    {NameBadge.Wifi, [gpio: "WIFI_EN", ifname: "wlan0", watchdog_timeout: :timer.minutes(10)]}
+  ],
   config: [
     {"usb0", %{type: VintageNetDirect}},
     {"eth0",

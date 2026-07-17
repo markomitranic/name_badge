@@ -1,7 +1,7 @@
 #!/bin/sh
 # Start (or relabel) an on-device battery logger for power-draw experiments.
 # Samples NameBadge.Battery.voltage() every 15 s and appends
-# "<iso8601>,<label>,<voltage>" to /data/power.log ON THE BADGE, so logging
+# "<iso8601>,<label>,<voltage>,<wifi 0|1>" to /data/power.log ON THE BADGE, so logging
 # survives SSH disconnects and WiFi being hard-powered off mid-experiment.
 #
 # Usage:
@@ -57,7 +57,8 @@ defmodule PowerLog do
     v = NameBadge.Battery.voltage()
     ts = DateTime.utc_now() |> DateTime.to_iso8601()
     v_str = :io_lib.format("~.4f", [v]) |> IO.iodata_to_binary()
-    File.write!("/data/power.log", "#{ts},#{label},#{v_str}\n", [:append])
+    wifi = if NameBadge.Network.wifi_present?(), do: "1", else: "0"
+    File.write!("/data/power.log", "#{ts},#{label},#{v_str},#{wifi}\n", [:append])
     Process.sleep(15_000)
     loop(label)
   end

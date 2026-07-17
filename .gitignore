@@ -28,3 +28,6 @@ erl_crash.dump
 # IDE / harness state
 .claude/
 .idea/
+
+# battery experiment data pulled from the badge (see scripts/power_mark.sh)
+power.log
