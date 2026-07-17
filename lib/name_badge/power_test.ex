@@ -119,7 +119,7 @@ defmodule NameBadge.PowerTest do
 
         screen("""
         = TEST CRASHED
-        #raw("#{inspect(error, limit: 5)}")
+        #raw("#{error |> inspect(limit: 5) |> String.replace("\"", "'")}")
 
         Cores, schedulers and WiFi are restored. See #raw("/data/debug.log").
         """)
