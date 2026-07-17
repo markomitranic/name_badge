@@ -9,6 +9,8 @@ defmodule NameBadge.Application do
 
   @impl true
   def start(_type, _args) do
+    attach_disk_logger()
+    silence_status_led()
     setup_wifi()
 
     children =
@@ -22,7 +24,43 @@ defmodule NameBadge.Application do
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: NameBadge.Supervisor]
-    Supervisor.start_link(children, opts)
+    result = Supervisor.start_link(children, opts)
+    log_boot_marker()
+    result
+  end
+
+  if Mix.target() == :host do
+    defp attach_disk_logger(), do: :ok
+  else
+    # Persists warning+ log entries (including process crash reports) to
+    # /data/debug.log so post-mortems survive reboots and power cycles —
+    # RingLogger is RAM-only and has eaten crash evidence twice.
+    defp attach_disk_logger() do
+      _ =
+        :logger.add_handler(:disk_log, :logger_std_h, %{
+          config: %{file: ~c"/data/debug.log", max_no_bytes: 512_000, max_no_files: 2},
+          level: :warning
+        })
+
+      :ok
+    end
+  end
+
+  if Mix.target() == :host do
+    defp log_boot_marker(), do: :ok
+  else
+    # Appends a "boot" line to the power log so hard resets (watchdog,
+    # brownout, power switch) stay visible in the record — they leave no
+    # shutdown report otherwise. Timestamp may be slightly stale until NTP
+    # syncs. Must never take the application down with it.
+    defp log_boot_marker() do
+      ts = DateTime.utc_now() |> DateTime.to_iso8601()
+      v = NameBadge.Battery.voltage() |> Float.round(4)
+      wifi = if NameBadge.Network.wifi_present?(), do: "1", else: "0"
+      File.write!("/data/power.log", "#{ts},boot,#{v},#{wifi}\n", [:append])
+    rescue
+      _ -> :ok
+    end
   end
 
   # List all child processes to be supervised
@@ -63,6 +101,19 @@ defmodule NameBadge.Application do
   defp button_spec(button_name, opts \\ []) do
     spec = {NameBadge.ButtonMonitor, Keyword.put(opts, :button, button_name)}
     Supervisor.child_spec(spec, id: button_name)
+  end
+
+  if Mix.target() == :host do
+    defp silence_status_led(), do: :ok
+  else
+    # The kernel blinks the red status LED (PE9) in a heartbeat pattern from
+    # boot. It saves ~0.5 mA average on battery and serves no purpose here,
+    # so both the trigger and any mid-blink brightness are cleared.
+    defp silence_status_led() do
+      _ = File.write("/sys/class/leds/red:status/trigger", "none")
+      _ = File.write("/sys/class/leds/red:status/brightness", "0")
+      :ok
+    end
   end
 
   if Mix.target() == :host do
