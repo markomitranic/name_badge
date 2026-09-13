@@ -36,49 +36,50 @@ defmodule NameBadge.Application do
     # /data/debug.log so post-mortems survive reboots and power cycles —
     # RingLogger is RAM-only and has eaten crash evidence twice.
     #
-    # HANDOFF — the paused stability investigation (2026-07-17). This handler
-    # and the boot marker below are the tripwires it left armed. Two distinct
-    # incidents are unresolved. (1) A hard board reset at 2026-07-17 04:56 UTC,
-    # 13 h into an on-battery drain test (Spotify screen, WiFi duty-cycled,
-    # cell at 3.61 V — well above the ~3.25 V death line). It left no
+    # HANDOFF — the stability investigation. This handler and the boot marker
+    # below are the tripwires it left armed, and they caught the screen-crash
+    # bug on 2026-09-04: the render path used GenServer.call defaults (5 s),
+    # but a grayscale draw that takes 1.3 s idle takes over 4 s while the art
+    # refill dithers covers on the other core — and with anti_ghost the screen
+    # paid for a white flush plus the draw in one call. Over 5 s, the screen
+    # process died, ScreenManager fell back to the menu, the menu render hit
+    # the same busy panel and died too, every ~15 s until a hard reset. Both
+    # a starved NameBadge.Battery and a busy EInk produced it. Fixed by giving
+    # every call on the render path a timeout the hardware can actually meet
+    # (see NameBadge.Display and NameBadge.Battery). That also explains the
+    # old "screen crashed on USB power during a stress test" report — that
+    # test wiped the art cache every 2 min, i.e. it ran the refill nonstop.
+    #
+    # Still unresolved: a hard board reset at 2026-07-17 04:56 UTC, 13 h into
+    # an on-battery drain test (Spotify screen, WiFi duty-cycled, cell at
+    # 3.61 V — well above the ~3.25 V death line). It left no
     # /data/shutdown.txt and no erl_crash.dump, and the power.log line being
     # written at that moment was NUL-truncated: the BEAM never exited, so it
     # was a watchdog reset (nerves_heart, VM timeout 30 s) or a power cut —
-    # not a BEAM crash. (2) The Spotify screen process crashed on USB power
-    # during a stress test (art cache wiped + WiFi hard-cut every 2 min),
-    # stranding WiFi off because a crash skips terminate/2. RingLogger lost
-    # the stack trace to a reflash before it was read.
-    #
-    # Running theory: both are software, not battery. Incident 2 proves a
-    # screen-crash path exists that has nothing to do with power (it happened
-    # while charging). Incident 1's timing is suspicious — it landed inside
-    # the expected ArtCache refill window (bursts every ~35–40 min, last one
-    # 04:17) — so the prime suspect is the burst path: WiFi power-on / USB
-    # re-enumeration / VintageNet reconfigure racing screen rotation and the
-    # e-ink grayscale draw. Ruled out: memory leak (BEAM stable at ~62 MB,
-    # binaries flat, through 27 forced burst cycles) and brownout for
-    # incident 2 (USB-powered). Brownout for incident 1 is unlikely but not
-    # formally excluded. A later 27-cycle soak on the fixed firmware (which
-    # also fixed the monotonic-time cooldown bug and added the ScreenManager
-    # crash fallback) did NOT reproduce either incident.
+    # not a BEAM crash. Its timing landed inside the expected ArtCache refill
+    # window (bursts every ~35–40 min, last one 04:17), so the suspect is
+    # still the burst path: WiFi power-on / USB re-enumeration / VintageNet
+    # reconfigure racing the grayscale draw. Ruled out: memory leak (BEAM
+    # stable at ~62 MB, binaries flat, through 27 forced burst cycles).
+    # Brownout is unlikely but not formally excluded.
     #
     # If you are debugging a new incident, start with the evidence, not the
     # code: /data/debug.log (this handler — a screen crash logs its exit
     # reason and stacktrace via ScreenManager), then /data/power.log "boot"
     # lines (a boot line with no graceful /data/shutdown.txt update means a
     # hard reset), then /data/shutdown.txt mtime. A screen crash with a
-    # stacktrace is scenario 1: fix the bug it names. A hard reset with an
-    # empty debug.log is scenario 2: distinguish watchdog from power by
-    # re-enabling the heartbeat LED (silence_status_led/0 below) and watching
-    # whether it stops blinking before the reboot — kernel-driven, so LED
-    # frozen = kernel/power died, LED beating until reset = VM stall.
+    # stacktrace is a plain bug: fix what it names. A hard reset with an
+    # empty debug.log is the unresolved one: distinguish watchdog from power
+    # by re-enabling the heartbeat LED (silence_status_led/0 below) and
+    # watching whether it stops blinking before the reboot — kernel-driven,
+    # so LED frozen = kernel/power died, LED beating until reset = VM stall.
     #
-    # Reproduction recipe that triggered incident 2 once (on the old code):
-    # on the Spotify screen, loop every 2 min — wipe /data/spotify_art, stash
+    # To put the render path under the load that broke it: on the Spotify
+    # screen, loop every 2 min — wipe /data/spotify_art, stash
     # VintageNet.get_configuration("wlan0") into the persistent_term key that
     # NameBadge.Network.wifi_on/0 reads, then VintageNet.deconfigure("wlan0",
     # persist: false). Run it on USB first (rules out battery); if clean for
-    # ~2 h, repeat on battery below ~3.6 V where incident 1 lived. Full
+    # ~2 h, repeat on battery below ~3.6 V where the hard reset lived. Full
     # context: git log around 2026-07-16..17 and scripts/power_mark.sh.
     defp attach_disk_logger() do
       _ =

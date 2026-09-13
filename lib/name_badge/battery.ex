@@ -3,7 +3,13 @@ defmodule NameBadge.Battery do
 
   def start_link(args), do: GenServer.start_link(__MODULE__, args, name: __MODULE__)
 
-  def voltage(), do: GenServer.call(__MODULE__, :get_voltage)
+  # Reading the cached voltage is instant, but the process can be starved for
+  # seconds while the art refill saturates both cores — and every status bar
+  # render asks twice. The 5 s call default made that starvation crash the
+  # caller instead of just making it slow.
+  @call_timeout :timer.seconds(30)
+
+  def voltage(), do: GenServer.call(__MODULE__, :get_voltage, @call_timeout)
 
   def charging?() do
     # consider the device charging when input voltage is 4.5V or

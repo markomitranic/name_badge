@@ -3,6 +3,15 @@ defmodule NameBadge.Display do
 
   require Logger
 
+  # A grayscale draw takes ~1.3 s idle but over 4 s while the Spotify art
+  # refill is dithering covers on the other core, and GenServer.call defaults
+  # to 5 s. That default used to turn a merely slow draw into a crash that
+  # cascaded: screen dies, ScreenManager falls back to the menu, the menu's
+  # own render hits the same busy panel and dies too, over and over until a
+  # hard reset. A slow panel is normal here, so wait it out instead.
+  @draw_timeout :timer.seconds(30)
+  @render_timeout :timer.seconds(60)
+
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -15,7 +24,7 @@ defmodule NameBadge.Display do
   to clear residue the previous image left in the grayscale mids.
   """
   def render_typst(markup, opts \\ []) do
-    GenServer.call(__MODULE__, {:render_typst, markup, opts})
+    GenServer.call(__MODULE__, {:render_typst, markup, opts}, @render_timeout)
   end
 
   @doc """
@@ -23,7 +32,7 @@ defmodule NameBadge.Display do
   `EInk.draw/2`, except `anti_ghost` (see `render_typst/2`).
   """
   def render_png(png, opts \\ []) do
-    GenServer.call(__MODULE__, {:render_png, png, opts})
+    GenServer.call(__MODULE__, {:render_png, png, opts}, @render_timeout)
   end
 
   @impl GenServer
@@ -57,11 +66,13 @@ defmodule NameBadge.Display do
     {:reply, :ok, state}
   end
 
+  # EInk.draw/2 and EInk.clear/2 hardcode the 5 s call default, so the
+  # GenServer is addressed directly to get a timeout the panel can meet.
   defp draw(image, opts) do
     {anti_ghost?, opts} = Keyword.pop(opts, :anti_ghost, false)
 
-    if anti_ghost?, do: EInk.clear(:white, opts)
-    EInk.draw(image, opts)
+    if anti_ghost?, do: GenServer.call(EInk, {:clear, :white, opts}, @draw_timeout)
+    GenServer.call(EInk, {:draw, image, opts}, @draw_timeout)
   end
 
   # EInk.draw treats a raw binary as already-packed pixel data, so PNG bytes must

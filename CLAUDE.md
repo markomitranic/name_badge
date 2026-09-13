@@ -165,7 +165,7 @@ The screen only appears in the top-level menu when all three `SPOTIFY_*` env var
 
 **Modules**: `NameBadge.Spotify.{Tokens, HTTP, Library, Album, Art, ArtCache}` + `NameBadge.Screen.Spotify`.
 
-**Spine extras**: text falls back per-glyph from Poppins to the bundled `Noto Sans JP` for Japanese titles — note the **host simulator also loads macOS system fonts**, so Japanese rendering can only be truly verified on the badge. Every draw is preceded by a white flush (`anti_ghost: true` render opt handled in `NameBadge.Display`, ~1 s extra) to clear grayscale-mid ghosting. There's deliberately no wifi icon on this screen (state flips would trigger extra e-ink refreshes); check the chip over SSH with `NameBadge.Network.wifi_present?()` instead.
+**Spine extras**: text falls back per-glyph from Poppins to the bundled `Noto Sans JP` for Japanese titles — note the **host simulator also loads macOS system fonts**, so Japanese rendering can only be truly verified on the badge. The `anti_ghost: true` render opt (a white flush before the draw, handled in `NameBadge.Display`) is **off**: the double refresh was more annoying than the ghosting. It's one keyword away in `Screen.Spotify.mount/2` if residue reappears. There's deliberately no wifi icon on this screen (state flips would trigger extra e-ink refreshes); check the chip over SSH with `NameBadge.Network.wifi_present?()` instead.
 
 **Host smoke tests** (no device needed): `MIX_TARGET=host mix run scripts/test_typst_composition.exs` renders the real spine template (Latin/æøå/Japanese cases) to `/tmp/spotify_composition_test_*.png`; `SPOTIFY_CLIENT_ID=fake SPOTIFY_CLIENT_SECRET=fake SPOTIFY_REFRESH_TOKEN=fake MIX_TARGET=host mix run scripts/test_art_cache.exs` drains a seeded cache and asserts the refill triggers at the right take. Both boot the full host app (including the LiveView preview server) as a side effect.
 
@@ -187,6 +187,7 @@ The WiFi chip (~3/4 of idle battery drain, measured 2026-07 — caveat: that mea
 
 - **WiFi is off while the Spotify screen is showing on battery** (except during refill bursts). On USB power it stays on. To SSH to a wifi-dark badge: exit the screen, plug in USB power, or use the USB cable directly (SSH over `usb0` works regardless of WiFi).
 - **BEAM monotonic time is negative** (starts around −576×10⁹ ms). Never compare `System.monotonic_time/1` against a literal `0` deadline — it reads as "deadline passed 18 years from now". This exact bug silently disabled ArtCache refills once already.
+- **Never leave a `GenServer.call` on the render path at its 5 s default.** The board has two cores and the art refill saturates both: a grayscale draw measured 1.3 s idle and 4.0 s under dither load, and `NameBadge.Battery` gets starved long enough that reading a cached float times out. A blown timeout used to crash the screen, drop to the menu, and crash the menu too, in a loop until a hard reset. `Display` (30 s draw / 60 s render), `Battery` (30 s) and `ArtCache` (30 s) now carry explicit timeouts. Note `EInk.draw/2` and `EInk.clear/2` hardcode the 5 s default, so `Display` calls that GenServer directly.
 
 - **Screen templates are Typst, not EEx.** Use Elixir string interpolation `#{var}`; `<%= %>` will crash the renderer. A leading `#` on the first Typst line also crashes it.
 - **Status bar is built in `lib/name_badge/layout.ex` `icons_markup/0`.** It's a Typst `#place(top + right, …)` with a `stack(dir: ltr, …)` of `image("images/icons/*.png")` calls. To add an icon: drop a ~16 pt PNG into `priv/typst/images/icons/` and add one `image(...)` line in the stack.
@@ -199,6 +200,7 @@ The WiFi chip (~3/4 of idle battery drain, measured 2026-07 — caveat: that mea
 - **WiFi chip is 2.4 GHz only** (Realtek RTL8188FU, visible in dmesg). Dual-band SSIDs fine; 5 GHz-only SSIDs won't connect.
 - **`VintageNetWiFi.quick_configure(ssid, psk)` persists across reboots** — usually faster than rebuilding firmware to change `NERVES_WIFI_SSID`/`NERVES_WIFI_PASSPHRASE`.
 - **Check connection state, not just "associated"**: `VintageNet.get(["interface","wlan0","connection"])` → `:disconnected | :lan | :internet`. Wait for `:internet` before expecting NTP / NervesCloud / weather sync.
+- **`mix` on PATH is a mise shim, and mise's config env wins over yours.** `.mise.local.toml` pins `MIX_TARGET=host` for the simulator, so `MIX_TARGET=trellis mix firmware` silently builds for *host* — the Nerves banner prints `MIX_TARGET: host` and it's easy to miss. Go through `mise exec -- env MIX_TARGET=trellis mix ...` (what `scripts/build.sh` and `scripts/burn.sh` do) to get the real binary with the target you asked for.
 - **Switching targets corrupts `_build`**: if you build for `host` then `trellis` (or vice versa), native NIFs end up wrong-arch. Symptom: `scrub-otp-release.sh: ERROR: Unexpected executable format`. Fix: `mix deps.clean dither typst && MIX_TARGET=trellis mix deps.get`.
 
 ## When Answering Hardware / Firmware Questions

@@ -35,9 +35,13 @@ defmodule NameBadge.Screen.Spotify do
       # 4-level grayscale via the calibrated UC8276 register waveform. Art is
       # pre-dithered to exact {0, 85, 170, 255} values below, so eink's own
       # dithering is disabled — those values map losslessly onto the 4 levels
-      # and text edges stay crisp. anti_ghost flushes the panel white before
-      # every draw to clear grayscale-mid ghosting from the previous cover.
-      |> assign(render_opts: [mode: :grayscale, dither: false, anti_ghost: true])
+      # and text edges stay crisp.
+      #
+      # anti_ghost: true adds a white flush before every draw (~1s of extra
+      # flashing) to clear grayscale-mid residue. Disabled for now because the
+      # double refresh is more annoying than the ghosting; re-add the option
+      # here if covers start leaving visible residue.
+      |> assign(render_opts: [mode: :grayscale, dither: false])
 
     {:ok, screen}
   end

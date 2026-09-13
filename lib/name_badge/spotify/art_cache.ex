@@ -22,7 +22,7 @@ defmodule NameBadge.Spotify.ArtCache do
   @batch_size 10
   @low_water 3
   @failure_cooldown :timer.minutes(3)
-  @call_timeout 5_000
+  @call_timeout :timer.seconds(30)
 
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
