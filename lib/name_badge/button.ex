@@ -1,6 +1,6 @@
 defmodule NameBadge.Button do
   @moduledoc """
-  Watches button A and tells the Spotify screen the moment it goes down.
+  Watches button A and tells the screen the moment it goes down.
 
   Fires on press rather than release so the e-ink starts redrawing as
   early as possible. Contact bounce can fire it more than once; the screen

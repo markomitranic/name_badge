@@ -2,34 +2,39 @@
 
 A single-purpose e-ink device: it shows one album from your Spotify saved library at a time, in a cassette-spine layout, and swaps to another every 5 minutes. Press button A to skip. That's the whole interface.
 
-It runs on the Protolux Trellis badge (400×300 e-ink, dual Cortex-A7, WiFi, Li-ion cell) as Elixir/Nerves firmware, and is built to sit on a desk or shelf for days on battery.
+It runs on the Protolux Trellis badge (400×300 e-ink, dual Cortex-A7, Li-ion cell) as Elixir/Nerves firmware. The badge is fully offline: your whole library is rendered on the laptop and copied over USB-C, and the WiFi chip is never powered.
 
 ## How it works
 
 ```
- boot ──▶ Spotify.Screen ──take──▶ ArtCache ──(< 3 left)──▶ refill burst
-              │    ▲                 /data/spotify_art         │
-              │    └── button A      10 dithered covers        ├─ WiFi on
-              ▼                                                ├─ Spotify API: random saved albums
-           Display ──▶ e-ink                                   ├─ download, resize, 4-level dither
-       (4-level grayscale)                                     └─ WiFi off
+ laptop                                              badge (offline)
+ ──────                                              ───────────────
+ scripts/sync.exs                                    /data/covers/<id>.png
+   1. Spotify API → .spotify/library.json                   │
+      new covers  → .spotify/originals/<id>.jpg             ▼
+   2. render     → .spotify/rendered/<id>.png        Screen: shuffled, one per 5 min
+                                                            │      ▲
+ scripts/push_covers.exs ═══ USB-C (SSH) ══════════▶        ▼      └── button A
+   uploads only new/changed frames                   Display ──▶ e-ink, 4 grays
 ```
 
-- **Covers are prepared ahead of time.** A disk-backed queue holds up to 10 covers, already resized and dithered to the panel's four gray levels. Rotating or skipping never touches the network.
-- **WiFi is off almost all the time.** When the queue runs low, a ~20 s burst powers the radio up, fetches a fresh batch, and cuts power again at the GPIO. Between bursts the chip is fully off.
-- **Random, not sequential.** Each cover is one random offset into your saved albums, so each cover costs one small API call no matter how big the library is (the library size is cached for a day).
-- **Nothing to configure on the device.** No menus, no splash, no status bar. It boots straight into the last cover and picks up where it left off.
+- **Everything heavy happens on the laptop.** Each frame is finished there: cover resized, contrast-stretched and dithered to the panel's four calibrated gray levels, spine text typeset. The badge just reads a PNG and draws it.
+- **No radio, ever.** The WiFi chip was by far the biggest drain and the only known cause of resets (its power-on surge browned out a weak cell). It's held off at its enable pin from boot.
+- **One core.** The second Cortex-A7 is taken offline at boot; a rotation needs a file read and a 1.3 s panel refresh, nothing more.
+- **Shuffle without repeats.** The whole library (1,565 albums here) plays once before anything comes back.
+- **Nothing to configure on the device.** No menus, no splash, no status bar. It boots straight into the last cover.
 
-## Battery
+## Library
 
-Measured on this badge (Oct 2026):
+`.spotify/` is the mirrored library and lives in git:
 
-| Mode | Runtime |
+| Path | What |
 |---|---|
-| WiFi on continuously | 6-7 h |
-| Normal use (covers rotating, WiFi off between bursts) | days (one run: 4.5 days of uptime before the cell gave out) |
+| `library.json` | Every saved album (id, artist, album, added date, cover URL), one per line |
+| `originals/<id>.jpg` | Cover art as downloaded from Spotify (640×640) |
+| `rendered/<id>.png` | Finished 400×300 frames, every pixel one of the 4 panel grays |
 
-The WiFi chip's power-on surge can brown the board out on a weak cell, so below ~35% (3.65 V) the badge stops refilling: it keeps rotating cached covers, then holds the last one. On USB power WiFi stays on, so the badge is reachable over SSH while plugged in.
+`scripts/sync.exs` only fetches what changed: new albums get downloaded and rendered, removed ones get deleted. Changing the render recipe (`@recipe` in the script) re-renders everything.
 
 ## Setup
 
@@ -42,50 +47,51 @@ mix local.hex --force && mix local.rebar --force
 mix archive.install hex nerves_bootstrap --force
 ```
 
-**Spotify credentials:** register an app at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) with redirect URI `http://127.0.0.1:8888/callback`, then:
+**Spotify credentials** (used by the laptop script only, never put on the badge): register an app at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) with redirect URI `http://127.0.0.1:8888/callback`, then:
 
 ```sh
 SPOTIFY_CLIENT_ID=... SPOTIFY_CLIENT_SECRET=... elixir scripts/spotify_auth.exs
 ```
 
-Paste the three printed variables into `.mise.local.toml` (git-ignored) under `[env]`. They're compiled into the firmware.
+Paste the three printed variables into `.mise.local.toml` (git-ignored) under `[env]`.
 
-**WiFi** is set once on the device and persists across reboots and reflashes:
+## Everyday use
 
-```sh
-./scripts/ssh.sh   # password: nerves (works over the USB cable without WiFi)
-```
-```elixir
-VintageNetWiFi.quick_configure("ssid", "password")
-```
-
-The chip is 2.4 GHz only.
-
-## Build and flash
+Plug the badge into the laptop with a USB-C **data** cable, then:
 
 ```sh
-./scripts/build.sh && ./scripts/push.sh   # build, then flash a running badge at wisteria.local
+mise exec -- elixir scripts/sync.exs          # mirror the library, render new frames
+mise exec -- elixir scripts/push_covers.exs   # copy them to the badge; it shows a fresh cover
+```
+
+Firmware changes:
+
+```sh
+./scripts/build.sh && ./scripts/push.sh   # build, then flash over USB (wisteria.local)
 ./scripts/burn.sh                         # first-time flash or brick recovery over USB-FEL
+./scripts/ssh.sh                          # IEx prompt on the badge (password: nerves)
 ```
 
 | Script | Does |
 |---|---|
+| `sync.exs` | Phase 1: mirror the Spotify library into `.spotify/`. Phase 2: render missing frames. `--render-only` skips Spotify |
+| `push_covers.exs` | Mirror `.spotify/rendered` onto the badge over SSH, by MD5 diff (optional host arg) |
 | `build.sh` | `mix deps.get` + `mix firmware` for the trellis target |
-| `push.sh` | OTA flash over SSH (optional host arg) |
+| `push.sh` | Flash firmware over SSH (optional host arg). Covers on the badge survive a flash |
 | `burn.sh` | USB-FEL flash, with a pre-flight checklist ([`docs/usb_fel_loaders.md`](./docs/usb_fel_loaders.md)) |
-| `ssh.sh` | IEx prompt on the badge (optional host arg) |
+| `ssh.sh` | IEx prompt on the badge |
 | `clean.sh` | Wipe `_build` + `deps` when a build gets into a bad state |
 | `spotify_auth.exs` | One-time Spotify OAuth to get a refresh token |
 
-Keep the badge on USB power while flashing. The reboot after a flash takes 2-3 minutes.
+Keep the badge plugged in while flashing; the reboot takes 2-3 minutes.
 
 ## On the badge
 
 ```elixir
-NameBadge.Battery.percentage()    # 0-100, along a measured discharge curve
-NameBadge.Battery.voltage()       # > 4.5 means USB power
-NameBadge.Network.wifi_present?() # is the chip powered right now
-send(NameBadge.Spotify.Screen, :button_pressed)  # skip, same as button A
+NameBadge.Battery.percentage()   # 0-100, along a measured discharge curve
+NameBadge.Battery.voltage()      # > 4.5 means USB power
+NameBadge.Screen.reload()        # rescan /data/covers and show a fresh cover
+send(NameBadge.Screen, :button_pressed)  # skip, same as button A
 ```
 
 Crash monitoring (disk log, boot markers, minute health samples) is built in but off; [`CLAUDE.md`](./CLAUDE.md#monitoring-off-by-default) explains how to switch it on.

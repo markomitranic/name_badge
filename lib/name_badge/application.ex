@@ -6,7 +6,8 @@ defmodule NameBadge.Application do
   @impl true
   def start(_type, _args) do
     silence_status_led()
-    setup_wifi()
+    hold_wifi_off()
+    park_second_core()
 
     # Monitoring is off to spare power and flash writes. Uncomment any of
     # these (and NameBadge.Diagnostics in children/0) to investigate crashes.
@@ -19,16 +20,11 @@ defmodule NameBadge.Application do
   defp children() do
     [
       # NameBadge.Diagnostics,
-      NameBadge.PowerMonitor,
       # EInk singleton, configured via `config :eink`. Display draws through it.
       EInk,
       NameBadge.Display,
-      {Task.Supervisor, name: NameBadge.TaskSupervisor},
-      NameBadge.Spotify.Tokens,
-      NameBadge.Spotify.Library,
-      NameBadge.Spotify.ArtCache,
-      NameBadge.Spotify.Screen,
-      {NameBadge.Button, NameBadge.Spotify.Screen}
+      NameBadge.Screen,
+      {NameBadge.Button, NameBadge.Screen}
     ]
   end
 
@@ -41,35 +37,21 @@ defmodule NameBadge.Application do
     :ok
   end
 
-  # First-boot provisioning: WiFi credentials baked in at burn time
-  # (config/provisioning.conf) seed VintageNet unless it already has a network.
-  defp setup_wifi() do
-    kv = Nerves.Runtime.KV.get_all()
-
-    if true?(kv["wifi_force"]) or not wlan0_configured?() do
-      ssid = kv["wifi_ssid"]
-      passphrase = kv["wifi_passphrase"]
-
-      if not empty?(ssid) do
-        _ = VintageNetWiFi.quick_configure(ssid, passphrase)
-        :ok
-      end
-    end
+  # The badge works fully offline, so the WiFi chip (by far the biggest
+  # drain) is never powered. WIFI_EN is active-low for this board's
+  # RTL8188FU; driving it high keeps the chip dark and off the USB bus.
+  defp hold_wifi_off() do
+    _ = Circuits.GPIO.write_one("WIFI_EN", 1)
+    :ok
   end
 
-  defp wlan0_configured?() do
-    VintageNet.get_configuration("wlan0") |> VintageNetWiFi.network_configured?()
-  catch
-    _, _ -> false
+  # A rotation is a file read plus a ~1.3 s panel draw, which one Cortex-A7
+  # handles easily. Taking CPU1 offline lets it power down instead of idling;
+  # the BEAM drops to one scheduler first so nothing is pinned to it.
+  defp park_second_core() do
+    _ = :erlang.system_flag(:schedulers_online, 1)
+    _ = :erlang.system_flag(:dirty_cpu_schedulers_online, 1)
+    _ = File.write("/sys/devices/system/cpu/cpu1/online", "0")
+    :ok
   end
-
-  defp true?(""), do: false
-  defp true?(nil), do: false
-  defp true?("false"), do: false
-  defp true?("FALSE"), do: false
-  defp true?(_), do: true
-
-  defp empty?(""), do: true
-  defp empty?(nil), do: true
-  defp empty?(_), do: false
 end

@@ -45,26 +45,12 @@ config :nerves_ssh,
     {:auth_method_kb_interactive_data, &NameBadge.ssh_show_prompt/3}
   ]
 
-# Configure the network using vintage_net
-#
-# Update regulatory_domain to your 2-letter country code E.g., "US"
-#
-# See https://github.com/nerves-networking/vintage_net for more information
+# The only network is the USB-C gadget link (SSH, flashing, cover pushes).
+# The WiFi chip stays unpowered: NameBadge.Application holds WIFI_EN off.
 config :vintage_net,
   regulatory_domain: "00",
-  # The watchdog only runs while the chip is powered (the PM state machine is
-  # dormant in :off), and is pet whenever connectivity is >= :lan — so it only
-  # fires after 10 straight minutes powered-but-disconnected, i.e. a genuinely
-  # hung chip on an always-on screen. The 60s default was too impatient: it reset
-  # the chip ~70s after boot (10s power-on hold + 60s) when association was slow.
-  # Spotify's ~1 min refill bursts never come near 10 min, and each burst is a
-  # hard power cycle anyway, so bursts self-heal without the watchdog.
-  power_managers: [
-    {NameBadge.Wifi, [gpio: "WIFI_EN", ifname: "wlan0", watchdog_timeout: :timer.minutes(10)]}
-  ],
   config: [
-    {"usb0", %{type: VintageNetDirect}},
-    {"wlan0", %{type: VintageNetWiFi}}
+    {"usb0", %{type: VintageNetDirect}}
   ]
 
 config :mdns_lite,

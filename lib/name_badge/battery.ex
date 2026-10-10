@@ -11,8 +11,8 @@ defmodule NameBadge.Battery do
   # raw / 4095 (12-bit ADC) * 1.8 V reference * (453k + 51k) / 51k divider
   @volts_per_count 1.8 / 4095 * 9.8823529412
 
-  # Measured on this badge (2026-10, two full drains with WiFi on, 6-7 h
-  # each): remaining runtime as a fraction of the whole drain, against the
+  # Measured on this badge (2026-10, two full drains with WiFi still on,
+  # 6-7 h each): remaining runtime as a fraction of the whole drain, against the
   # minute-sampled ADC voltage. Li-ion sags fast at both ends and sits on a
   # long flat plateau around 3.6-3.7 V, which a linear map reads as "half
   # full" right before the badge dies.
@@ -30,11 +30,6 @@ defmodule NameBadge.Battery do
     {3.49, 5},
     {3.35, 0}
   ]
-
-  # The WiFi chip's power-on surge browned the board out mid-refill at
-  # 3.56 V (it survived at 3.57 V). Below this, nothing should power it up
-  # on its own. Roughly 35% on the curve above.
-  @low_voltage 3.65
 
   @doc """
   Current input voltage. On USB power this reads the input rail (> 4.5 V).
@@ -56,14 +51,6 @@ defmodule NameBadge.Battery do
   @example `Battery.charging?() // true`
   """
   def charging?(), do: voltage() > 4.5
-
-  @doc """
-  Whether the battery is too low to risk powering the WiFi chip on. Never
-  true on USB power, since that reads above 4.5 V.
-
-  @example `Battery.low?() // false`
-  """
-  def low?(), do: voltage() < @low_voltage
 
   @doc """
   Remaining charge as 0-100, interpolated along the measured discharge curve.

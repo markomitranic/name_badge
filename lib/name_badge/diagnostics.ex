@@ -19,14 +19,9 @@ defmodule NameBadge.Diagnostics do
   @monitored [
     NameBadge.Diagnostics,
     NameBadge.Display,
-    EInk,
-    NameBadge.PowerMonitor,
-    NameBadge.Spotify.Screen,
-    NameBadge.Spotify.ArtCache,
-    NameBadge.Spotify.Library,
-    NameBadge.Spotify.Tokens,
-    VintageNet.RouteManager,
-    VintageNet.Updater
+    NameBadge.Screen,
+    NameBadge.Button,
+    EInk
   ]
 
   @doc """
@@ -46,7 +41,7 @@ defmodule NameBadge.Diagnostics do
   end
 
   @doc """
-  Appends a "ts,boot,voltage,wifi" line to /data/power.log. A boot line with
+  Appends a "ts,boot,voltage" line to /data/power.log. A boot line with
   no matching graceful /data/shutdown.txt means a hard reset (watchdog,
   brownout, power cut). The timestamp may be stale until NTP syncs.
 
@@ -55,8 +50,7 @@ defmodule NameBadge.Diagnostics do
   def log_boot() do
     ts = DateTime.utc_now() |> DateTime.to_iso8601()
     voltage = NameBadge.Battery.voltage() |> Float.round(4)
-    wifi = if NameBadge.Network.wifi_present?(), do: "1", else: "0"
-    File.write("/data/power.log", "#{ts},boot,#{voltage},#{wifi}\n", [:append])
+    File.write("/data/power.log", "#{ts},boot,#{voltage}\n", [:append])
     :ok
   end
 
@@ -148,9 +142,7 @@ defmodule NameBadge.Diagnostics do
       scheduler_queues: :erlang.statistics(:run_queue_lengths_all),
       normal_schedulers: :erlang.system_info(:schedulers),
       processes: Map.new(@monitored, &process_sample/1),
-      voltage: NameBadge.Battery.voltage() |> Float.round(4),
-      wifi_present: File.exists?("/sys/class/net/wlan0"),
-      wifi_state: read_text("/sys/class/net/wlan0/operstate")
+      voltage: NameBadge.Battery.voltage() |> Float.round(4)
     })
 
     snapshot_kernel(state.dir)

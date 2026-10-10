@@ -22,8 +22,7 @@ defmodule NameBadge.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      # Typst templates go through EEx inside the typst dep.
-      extra_applications: [:logger, :runtime_tools, :eex],
+      extra_applications: [:logger, :runtime_tools],
       mod: {NameBadge.Application, []}
     ]
   end
@@ -36,9 +35,7 @@ defmodule NameBadge.MixProject do
       {:shoehorn, "~> 0.9.1"},
       {:ring_logger, "~> 0.11.0"},
       {:toolshed, "~> 0.4.0"},
-      {:req, "~> 0.5"},
       {:dither, "~> 0.2.4", override: true},
-      {:typst, "~> 0.3"},
       {:nerves_runtime, "~> 0.13.0"},
 
       # Dependencies for all targets except :host
