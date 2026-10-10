@@ -1,0 +1,1 @@
+%{art_size: 300, panel_grays: %{0 => 0, 23 => 85, 117 => 170, 255 => 255}, layout: 1, contrast_clip: {0.01, 0.99}, gamma: 2.2, algorithm: :stucki}
