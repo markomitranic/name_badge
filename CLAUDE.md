@@ -111,9 +111,9 @@ Application.ensure_all_started(:nerves_hub_link)
    mix local.rebar --force
    mix archive.install hex nerves_bootstrap --force
    ```
-3. Nerves build prereqs — all three are required:
+3. Nerves build prereqs — all four are required (`pkg-config` for `vintage_net_wifi`'s native build):
    ```sh
-   brew install xz fwup squashfs
+   brew install xz fwup squashfs pkg-config
    ```
 4. `sunxi-tools` for FEL / USB recovery flashing only — prefer the HEAD build:
    ```sh
@@ -181,6 +181,7 @@ The WiFi chip (~3/4 of idle battery drain, measured 2026-07 — caveat: that mea
 - `NameBadge.Network.wifi_on/0` / `wifi_off/0` toggle it at runtime (the persisted config is never touched, so a reboot always comes back online). `wifi_off` takes effect within ~seconds — the VintageNet power-on hold time is 10 s, down from the original 2 min "grace period". `await_internet/1` blocks until `:internet`; `wifi_present?/0` reports whether the chip is physically up.
 - **The Spotify screen is the only thing that turns WiFi off**: covers rotate from the prefetched `ArtCache` with the chip dark, each refill burst powers it up for ~a minute every ~35 min, and **exiting the screen turns it back on** (`ArtCache` monitors its caller, so a burst that outlives the screen leaves WiFi on instead of cutting it under the next screen).
 - **Settings → WiFi** turns WiFi on (for the setup wizard's AP mode).
+- **Health recorder**: `NameBadge.Diagnostics` appends a minute sample (load, memory, scheduler queues, key process mailboxes, voltage, wifi state) to `/data/health.jsonl` (2×2 MB, rotated) and keeps the last two boots' `dmesg` in `/data/health-kernel{,.previous}.log`. Wrap slow operations in `Diagnostics.measure(:name, fn -> ... end)` to log start/finish/failed timings; display draws, cover download/dither/compose and art refills already are.
 - **The red status LED is silenced at boot** (`silence_status_led/0` in `Application`) — the kernel otherwise blinks it in a heartbeat pattern 24/7 (~0.5 mA average). Re-enable at runtime: `File.write!("/sys/class/leds/red:status/trigger", "heartbeat")`.
 
 ## Gotchas Worth Remembering

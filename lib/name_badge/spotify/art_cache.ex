@@ -16,7 +16,7 @@ defmodule NameBadge.Spotify.ArtCache do
   use GenServer
   require Logger
 
-  alias NameBadge.Network
+  alias NameBadge.{Diagnostics, Network}
   alias NameBadge.Spotify.{Album, Art, Library, Tokens}
 
   @batch_size 10
@@ -170,7 +170,11 @@ defmodule NameBadge.Spotify.ArtCache do
   # ---- Refill ----
 
   defp start_refill(state, missing) do
-    task = Task.Supervisor.async_nolink(NameBadge.TaskSupervisor, fn -> refill(missing) end)
+    task =
+      Task.Supervisor.async_nolink(NameBadge.TaskSupervisor, fn ->
+        Diagnostics.measure(:art_refill, fn -> refill(missing) end)
+      end)
+
     %{state | refill_task: task}
   end
 

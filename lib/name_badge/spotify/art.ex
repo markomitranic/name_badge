@@ -11,6 +11,8 @@ defmodule NameBadge.Spotify.Art do
   path maps them 1:1 onto the panel's 4 calibrated levels.
   """
 
+  alias NameBadge.Diagnostics
+
   @art_size 300
 
   # Stucki preserves mid-tone structure with less granular noise than
@@ -27,9 +29,11 @@ defmodule NameBadge.Spotify.Art do
   @example `Art.fetch("https://i.scdn.co/image/...") // {:ok, <<137, 80, ...>>}`
   """
   def fetch(url) do
-    case Req.get(url, receive_timeout: @image_timeout, decode_body: false) do
+    download = fn -> Req.get(url, receive_timeout: @image_timeout, decode_body: false) end
+
+    case Diagnostics.measure(:cover_download, download) do
       {:ok, %{status: 200, body: body}} when is_binary(body) ->
-        preprocess(body)
+        Diagnostics.measure(:cover_dither, fn -> preprocess(body) end)
 
       {:ok, %{status: status}} ->
         {:error, {:http, status}}

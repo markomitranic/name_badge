@@ -2,6 +2,7 @@ defmodule NameBadge.Display do
   use GenServer
 
   require Logger
+  alias NameBadge.Diagnostics
 
   # A grayscale draw takes ~1.3 s idle but over 4 s while the Spotify art
   # refill is dithering covers on the other core, and GenServer.call defaults
@@ -71,8 +72,15 @@ defmodule NameBadge.Display do
   defp draw(image, opts) do
     {anti_ghost?, opts} = Keyword.pop(opts, :anti_ghost, false)
 
-    if anti_ghost?, do: GenServer.call(EInk, {:clear, :white, opts}, @draw_timeout)
-    GenServer.call(EInk, {:draw, image, opts}, @draw_timeout)
+    if anti_ghost? do
+      Diagnostics.measure(:display_clear, fn ->
+        GenServer.call(EInk, {:clear, :white, opts}, @draw_timeout)
+      end)
+    end
+
+    Diagnostics.measure(:display_draw, fn ->
+      GenServer.call(EInk, {:draw, image, opts}, @draw_timeout)
+    end)
   end
 
   # EInk.draw treats a raw binary as already-packed pixel data, so PNG bytes must

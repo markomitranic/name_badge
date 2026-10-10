@@ -13,6 +13,7 @@ defmodule NameBadge.Screen.Spotify do
 
   require Logger
 
+  alias NameBadge.Diagnostics
   alias NameBadge.Spotify.{ArtCache, Tokens}
 
   @rotate_interval :timer.minutes(5)
@@ -194,8 +195,10 @@ defmodule NameBadge.Screen.Spotify do
 
     typst_opts = [root_dir: tmp_root(), extra_fonts: [fonts_dir()]]
 
-    Typst.render_to_png!(template, [], typst_opts)
-    |> List.first()
+    Diagnostics.measure(:cover_compose, fn ->
+      Typst.render_to_png!(template, [], typst_opts)
+      |> List.first()
+    end)
   end
 
   # Escape Typst markup special chars so artist/album text renders as plain
