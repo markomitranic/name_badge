@@ -26,6 +26,7 @@ defmodule NameBadge.Application do
     opts = [strategy: :one_for_one, name: NameBadge.Supervisor]
     result = Supervisor.start_link(children, opts)
     log_boot_marker()
+    rest_wifi_on_low_battery()
     result
   end
 
@@ -106,6 +107,18 @@ defmodule NameBadge.Application do
       File.write!("/data/power.log", "#{ts},boot,#{v},#{wifi}\n", [:append])
     rescue
       _ -> :ok
+    end
+  end
+
+  if Mix.target() == :host do
+    defp rest_wifi_on_low_battery(), do: :ok
+  else
+    # VintageNet powers WiFi up from the persisted config before this app
+    # starts. On a nearly flat battery that steady draw finished the badge
+    # off 8 minutes after a reboot, so it goes straight back down. USB power
+    # never reads low, and PowerMonitor brings WiFi back once plugged in.
+    defp rest_wifi_on_low_battery() do
+      if NameBadge.Battery.low?(), do: NameBadge.Network.wifi_off()
     end
   end
 

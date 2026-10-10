@@ -29,15 +29,15 @@ defmodule NameBadge.Layout do
   end
 
   defp icons_markup() do
-    voltage = NameBadge.Battery.voltage()
+    percentage = NameBadge.Battery.percentage()
 
     battery_icon =
       cond do
         NameBadge.Battery.charging?() -> "battery-charging.png"
-        voltage > 4.0 -> "battery-100.png"
-        voltage > 3.8 -> "battery-75.png"
-        voltage > 3.6 -> "battery-50.png"
-        voltage > 3.4 -> "battery-25.png"
+        percentage >= 80 -> "battery-100.png"
+        percentage >= 55 -> "battery-75.png"
+        percentage >= 30 -> "battery-50.png"
+        percentage >= 10 -> "battery-25.png"
         true -> "battery-0.png"
       end
 

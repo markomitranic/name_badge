@@ -16,7 +16,7 @@ defmodule NameBadge.Spotify.ArtCache do
   use GenServer
   require Logger
 
-  alias NameBadge.{Diagnostics, Network}
+  alias NameBadge.{Battery, Diagnostics, Network}
   alias NameBadge.Spotify.{Album, Art, Library, Tokens}
 
   @batch_size 10
@@ -82,6 +82,7 @@ defmodule NameBadge.Spotify.ArtCache do
       in_cooldown?(state) -> state
       @batch_size - missing >= @low_water -> state
       not Tokens.configured?() -> state
+      Battery.low?() -> state
       true -> start_refill(state, missing)
     end
   end
