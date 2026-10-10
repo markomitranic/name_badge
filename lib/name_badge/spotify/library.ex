@@ -180,12 +180,5 @@ defmodule NameBadge.Spotify.Library do
     _ -> %__MODULE__{}
   end
 
-  if Mix.target() == :host do
-    defp cache_file do
-      System.tmp_dir!()
-      |> Path.join("spotify_library.json")
-    end
-  else
-    defp cache_file, do: "/data/spotify_library.json"
-  end
+  defp cache_file, do: "/data/spotify_library.json"
 end

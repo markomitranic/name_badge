@@ -4,11 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Purpose
 
-This repository is a fork of [`protolux-electronics/name_badge`](https://github.com/protolux-electronics/name_badge) — the Elixir/Nerves firmware for the Protolux Trellis e-ink badge distributed at the Goatmire Elixir conference (Gothenburg, September 2025). The owner (Marko) received a badge at the conference and uses this fork as a personal playground for unrelated apps over time.
+This repository is a fork of [`protolux-electronics/name_badge`](https://github.com/protolux-electronics/name_badge), the Elixir/Nerves firmware for the Protolux Trellis e-ink badge distributed at the Goatmire Elixir conference (Gothenburg, September 2025). The owner (Marko) received a badge at the conference.
 
-**Cleanup state (2026-04-19)**: conference-specific functionality has been stripped. Kept: core substrate (`Screen` framework, `Layout`, `Display`/Typst/Dither/EInk pipeline, `ButtonMonitor`, `ScreenManager`, `VintageNet`/`VintageNetWiFi`, `TimezoneService`, `Battery`, NervesHub link, host-mode LiveView preview), the `Weather` screen (now the home screen), and `Settings` → `WiFi` + `SystemInfo`. Removed: `NameBadge.Socket` (Goatmire websocket), `NameBadge.Gallery` + gallery screen, `NameBadge.CalendarService` + calendar screen, `Screen.NameBadge` (QR personalization), `Screen.Snake`, `Screen.Settings.{QrCode,Tutorial,SudoMode}`; deps `:qr_code`/`:slipstream`/`:icalendar` (slipstream stays transitively via `nerves_hub_link`); env vars `DEVICE_SETUP_URL`/`CALENDAR_URL`; assets `priv/sudo_mode.bin`, `priv/typst/images/tigris_logo.svg`, `priv/typst/images/icons/link*.png`.
+**It is now a single-purpose Spotify badge (2026-10-10).** It boots straight into the Spotify album art screen; there are no menus, settings, splash screen, status bar or host simulator. Button A skips to the next album, button B does nothing. The goal is stability and battery life: anything that doesn't serve the cover rotation was removed (git history has it: the multi-screen `Screen`/`ScreenManager` framework, `Layout` status bar, Settings → WiFi wizard + System Info, `TimezoneService`/tzdata, NervesHub link, `GrayTune` calibration harness, the LiveView simulator and mocks, power measurement scripts). Monitoring (`NameBadge.Diagnostics`) is kept but switched off.
 
-Environment status: toolchain bootstrapped, simulator working (`MIX_TARGET=host iex -S mix`), badge previously flashed from source to `name_badge 0.3.1` over SSH (pre-cleanup). Original sibling clones (`nerves_system_trellis/`, `usb_fel_loaders/`, `goatmire/`) moved out of the workspace — they're consumed via hex or re-cloned on demand. See `docs/` for per-layer paper documentation. **Note**: `docs/elixir_application.md` predates this cleanup; sections on Socket/Gallery/Calendar/QR no longer reflect the code.
+Supervision tree (`NameBadge.Application`): `PowerMonitor`, `EInk`, `Display`, `TaskSupervisor`, `Spotify.{Tokens, Library, ArtCache, Screen}`, `Button`. Everything is device-only: the app no longer builds for `MIX_TARGET=host`.
+
+See `docs/` for per-layer paper documentation. **Note**: `docs/elixir_application.md` describes the old multi-screen app and no longer reflects the code.
 
 ## Git Remotes
 
@@ -47,26 +49,23 @@ AI-consumable paper documentation extracted from the four upstream repos. Each f
 
 ## Required Environment Variables
 
-`mise.toml` pins `MIX_TARGET=trellis` by default. Optional overrides live in `.mise.local.toml` (git-ignored):
+`mise.toml` pins `MIX_TARGET=trellis`. Secrets live in `.mise.local.toml` (git-ignored):
 
 ```toml
 [env]
-NERVES_WIFI_SSID = "..."
-NERVES_WIFI_PASSPHRASE = "..."
-# Optional:
-# NH_PRODUCT_KEY = "..."
-# NH_PRODUCT_SECRET = "..."
-# Spotify album art screen (see scripts/spotify_auth.exs to obtain):
-# SPOTIFY_CLIENT_ID = "..."
-# SPOTIFY_CLIENT_SECRET = "..."
-# SPOTIFY_REFRESH_TOKEN = "..."
+# Spotify (see scripts/spotify_auth.exs to obtain). All three are required,
+# or the badge shows a "not configured" page.
+SPOTIFY_CLIENT_ID = "..."
+SPOTIFY_CLIENT_SECRET = "..."
+SPOTIFY_REFRESH_TOKEN = "..."
+# Optional, first-boot WiFi baked into the burn:
+# NERVES_WIFI_SSID = "..."
+# NERVES_WIFI_PASSPHRASE = "..."
 ```
 
-Wi-Fi credentials can also be set at runtime on the device via `VintageNetWiFi.quick_configure/2` (persists across reboots), so baking them into firmware is usually unnecessary.
+The Spotify values are compiled into the firmware. If the local file is lost, they can be read back off a running badge: `Application.get_env(:name_badge, :spotify)` over SSH.
 
-For the **simulator**, override target per command: `MIX_TARGET=host mix deps.get`, `MIX_TARGET=host iex -S mix`.
-
-Forgetting `MIX_TARGET=trellis` when building firmware triggers a cross-compilation error (host Mach-O vs expected ARM ELF). Recovery: `rm -rf _build deps && mix deps.get && mix firmware`.
+Wi-Fi credentials are set at runtime on the device via `VintageNetWiFi.quick_configure/2` (persists across reboots), so baking them into firmware is usually unnecessary. With no WiFi wizard any more, that SSH command (over the USB cable if needed) is the only way to change networks.
 
 ## Common Commands
 
@@ -98,8 +97,8 @@ Inside IEx on the badge:
 VintageNet.info()                                   # network status
 VintageNetWiFi.quick_configure("ssid", "password")  # set WiFi at runtime (persists)
 NervesTime.restart_ntpd()                           # fix clock / TLS errors
-Application.stop(:nerves_hub_link)                  # restart OTA link after 401
-Application.ensure_all_started(:nerves_hub_link)
+NameBadge.Battery.voltage()                         # e.g. 3.82 (> 4.5 on USB)
+NameBadge.Battery.percentage()                      # 0-100 along the measured curve
 ```
 
 ## Toolchain Prerequisites (macOS)
@@ -145,8 +144,6 @@ If `usb_bulk_send() ERROR -1` appears: let the badge sit in FEL for a few second
 
 Port of [MusaicFM](https://github.com/obrhoff/MusaicFM): rotates through the user's Spotify *saved albums* library, one cover at a time, cassette-tape spine layout (300×300 art on the left, vertical separator, artist + album rotated 90° up the right side). Swaps album every 5 minutes; button A forces an immediate new album.
 
-The screen only appears in the top-level menu when all three `SPOTIFY_*` env vars above are set.
-
 **One-time setup** (on the laptop):
 
 1. Register a Spotify app at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard). Add redirect URI `http://127.0.0.1:8888/callback`. Copy the **Client ID** and **Client Secret**.
@@ -155,56 +152,56 @@ The screen only appears in the top-level menu when all three `SPOTIFY_*` env var
    SPOTIFY_CLIENT_ID=... SPOTIFY_CLIENT_SECRET=... elixir scripts/spotify_auth.exs
    ```
    Browser opens → log in to Spotify → script prints the three env vars.
-3. Paste them into `.mise.local.toml` under `[env]`, then reflash (`mix burn` or ssh-upload).
+3. Paste them into `.mise.local.toml` under `[env]`, then reflash (`./scripts/build.sh && ./scripts/push.sh`).
 
 **Runtime files** on the badge (`/data/`):
 
-- `/data/spotify_tokens.json` — holds any refresh token Spotify rotates (survives reboot; falls back to the env-var value on wipe).
-- `/data/spotify_library.json` — cached album list (refreshed every 24 h, re-fetched on boot if stale).
-- `/data/spotify_art/` — queue of prefetched, pre-dithered covers (`<id>.png` + `<id>.json` pairs). Refilled in batches of 10 when it drops below 3, so rotation never blocks on the network.
+- `/data/spotify_tokens.json`: holds any refresh token Spotify rotates (survives reboot; falls back to the env-var value on wipe).
+- `/data/spotify_library.json`: cached library size (refreshed every 24 h on the next fetch).
+- `/data/spotify_art/`: queue of prefetched, pre-dithered covers (`<id>.png` + `<id>.json` pairs). Refilled in batches of 10 when it drops below 3, so rotation never blocks on the network. When it's empty the last cover stays up and the screen retries every 30 s.
 
-**Modules**: `NameBadge.Spotify.{Tokens, HTTP, Library, Album, Art, ArtCache}` + `NameBadge.Screen.Spotify`.
+**Modules**: `NameBadge.Spotify.{Tokens, HTTP, Library, Album, Art, ArtCache, Screen}`. `Spotify.Screen` is a plain GenServer: it takes a cover, composes the spine with Typst, and draws it through `Display`. `NameBadge.Button` sends it `:button_pressed` on the falling edge of BTN_1; presses that queue up during a draw are dropped.
 
-**Spine extras**: text falls back per-glyph from Poppins to the bundled `Noto Sans JP` for Japanese titles — note the **host simulator also loads macOS system fonts**, so Japanese rendering can only be truly verified on the badge. The `anti_ghost: true` render opt (a white flush before the draw, handled in `NameBadge.Display`) is **off**: the double refresh was more annoying than the ghosting. It's one keyword away in `Screen.Spotify.mount/2` if residue reappears. There's deliberately no wifi icon on this screen (state flips would trigger extra e-ink refreshes); check the chip over SSH with `NameBadge.Network.wifi_present?()` instead.
+**Boot**: no splash. The panel keeps its last image without power, so the previous cover stays up until the first new one is drawn (a cache hit at boot draws within seconds).
 
-**Host smoke tests** (no device needed): `MIX_TARGET=host mix run scripts/test_typst_composition.exs` renders the real spine template (Latin/æøå/Japanese cases) to `/tmp/spotify_composition_test_*.png`; `SPOTIFY_CLIENT_ID=fake SPOTIFY_CLIENT_SECRET=fake SPOTIFY_REFRESH_TOKEN=fake MIX_TARGET=host mix run scripts/test_art_cache.exs` drains a seeded cache and asserts the refill triggers at the right take. Both boot the full host app (including the LiveView preview server) as a side effect.
+**Spine extras**: text falls back per-glyph from Poppins to the bundled `Noto Sans JP` for Japanese titles. Only the font weights the spine uses (Poppins Regular/Bold/SemiBold Italic + Noto Sans JP) ship in `priv/typst/fonts`. The `anti_ghost: true` draw opt (a white flush before the draw, handled in `NameBadge.Display`) is **off**: the double refresh was more annoying than the ghosting. It's one keyword away in `@draw_opts` in `Spotify.Screen` if residue reappears.
 
-**Grayscale**: the screen renders in 4-level grayscale (`mode: :grayscale`, art dithered at `bit_depth: 2`). The hand-calibrated UC8276 register waveform lives in the `eink` dep — Marko's fork, branch `uc8276-grayscale-lut`, PR [protolux-electronics/eink#11](https://github.com/protolux-electronics/eink/pull/11) toward upstream `refactor-driver`; swap `mix.exs` back to hex once merged. Screens opt into draw options via a `render_opts` assign (see `NameBadge.Screen`). Calibration method + harness: `NameBadge.GrayTune` moduledocs and `scripts/gray_calibration.html` (photo-measurement tool); live re-tuning additionally needs the local `../eink` clone as a path dep with the `gc4_tune` scaffolding (stashed on its `feat/drawing-pipeline` branch).
+**Grayscale**: the screen renders in 4-level grayscale (`mode: :grayscale`, art dithered at `bit_depth: 2`). The hand-calibrated UC8276 register waveform lives in the `eink` dep (Marko's fork, branch `grayscale-on-dp`); swap `mix.exs` back to hex once upstream ships a real grayscale LUT. The calibration harness (`NameBadge.GrayTune`, `scripts/gray_calibration.html`) was removed; recover it from git history if the LUT ever needs re-tuning.
 
 ## Power Management
 
-The WiFi chip (~3/4 of idle battery drain, measured 2026-07 — caveat: that measurement predates the actual GPIO fix, so it captured a software disassociate only; the true hard-off saving is still unmeasured, see `scripts/power_mark.sh`) can be hard-powered-off via the `WIFI_EN` GPIO — `NameBadge.Wifi.power_off/1` drives the pin when VintageNet deconfigures `wlan0`. The policy is deliberately dumb — no scheduler, apps flip the switch themselves:
+The WiFi chip is the biggest battery drain and can be hard-powered-off via the `WIFI_EN` GPIO: `NameBadge.Wifi.power_off/1` drives the pin when VintageNet deconfigures `wlan0`. The policy is deliberately dumb, no scheduler:
 
-- **WiFi is on by default, always** — from boot, on every screen except Spotify.
-- **Low battery (< 3.65 V, ~35%) keeps WiFi down**: `Battery.low?/0` gates the Spotify art refill (covers rotate from the cache, then the last one stays up) and powers WiFi off right after boot. The chip's power-on surge browned the board out mid-refill at 3.56 V, and a reboot on a near-flat cell with WiFi up died again 8 min later. USB power reads > 4.5 V, so a plugged-in badge is never low. Leaving the Spotify screen still turns WiFi back on.
-- **Battery percentage follows a measured discharge curve** (`Battery.percentage_at/1`): two full WiFi-on drains, 6-7 h each from full to dead at ~3.35 V. 3.55 V is ~10% (~40 min left). Re-derive it from `/data/health.jsonl` voltage samples if the load profile changes.
-- **On USB power WiFi never turns off**: `Network.wifi_off/0` refuses while `Battery.charging?()` (voltage > 4.5 V — threshold not yet verified on hardware), and `NameBadge.PowerMonitor` re-powers the chip whenever it finds it off while charging (10 s poll) — covering both plug-in-after-off and crash-stranded states. Unplugging doesn't turn it off; the next app-driven `wifi_off` does.
-- **Crash forensics on disk**: every boot appends a `ts,boot,voltage,wifi` line to `/data/power.log`, and warning+ logs (including process crash reports) persist to `/data/debug.log` (rotated, 2×512 KB) — RingLogger is RAM-only and loses everything on reboot. A crashed screen no longer takes `ScreenManager` down: it logs the exit reason, restores WiFi, and falls back to the home screen (a crash skips the screen's `terminate/2`, which is where Spotify normally turns WiFi back on).
-- `NameBadge.Network.wifi_on/0` / `wifi_off/0` toggle it at runtime (the persisted config is never touched, so a reboot always comes back online). `wifi_off` takes effect within ~seconds — the VintageNet power-on hold time is 10 s, down from the original 2 min "grace period". `await_internet/1` blocks until `:internet`; `wifi_present?/0` reports whether the chip is physically up.
-- **The Spotify screen is the only thing that turns WiFi off**: covers rotate from the prefetched `ArtCache` with the chip dark, each refill burst powers it up for ~a minute every ~35 min, and **exiting the screen turns it back on** (`ArtCache` monitors its caller, so a burst that outlives the screen leaves WiFi on instead of cutting it under the next screen).
-- **Settings → WiFi** turns WiFi on (for the setup wizard's AP mode).
-- **Health recorder**: `NameBadge.Diagnostics` appends a minute sample (load, memory, scheduler queues, key process mailboxes, voltage, wifi state) to `/data/health.jsonl` (2×2 MB, rotated) and keeps the last two boots' `dmesg` in `/data/health-kernel{,.previous}.log`. Wrap slow operations in `Diagnostics.measure(:name, fn -> ... end)` to log start/finish/failed timings; display draws, cover download/dither/compose and art refills already are.
-- **The red status LED is silenced at boot** (`silence_status_led/0` in `Application`) — the kernel otherwise blinks it in a heartbeat pattern 24/7 (~0.5 mA average). Re-enable at runtime: `File.write!("/sys/class/leds/red:status/trigger", "heartbeat")`.
+- **On battery, WiFi is off except during refill bursts.** VintageNet powers it up at boot from the persisted config; the screen's first `ArtCache.take/0` powers it straight back down. Each refill burst (~20 s, every ~35-50 min of rotation) turns it on, fetches up to 10 covers, and turns it off again however the burst ended.
+- **Low battery (< 3.65 V, ~35%) skips refills**: `Battery.low?/0` gates the refill, so covers rotate from the cache and then the last one stays up. The chip's power-on surge browned the board out mid-refill at 3.56 V (survived at 3.57 V). This was also the cause of the "unresolved" July 2026 hard reset during a battery drain test.
+- **On USB power WiFi never turns off**: `Network.wifi_off/0` refuses while `Battery.charging?()` (> 4.5 V, the ADC reads the input rail), and `NameBadge.PowerMonitor` re-powers the chip within 10 s of plugging in. USB power never reads low.
+- **`Battery` is stateless**: every call is one sysfs ADC read, no polling process (the old one woke the CPU twice a second and could be starved into call timeouts).
+- **Battery percentage follows a measured discharge curve** (`Battery.percentage_at/1`): two full WiFi-on drains, 6-7 h each from full to dead at ~3.35 V. 3.55 V is ~10% (~40 min left with WiFi on). Nothing on the badge displays it; check over SSH.
+- **The red status LED is silenced at boot** (`silence_status_led/0` in `Application`); the kernel otherwise blinks it 24/7 (~0.5 mA average). Re-enable at runtime: `File.write!("/sys/class/leds/red:status/trigger", "heartbeat")`.
+
+## Monitoring (off by default)
+
+`NameBadge.Diagnostics` holds three recorders, each enabled by uncommenting one line in `NameBadge.Application`:
+
+- `Diagnostics.attach_disk_logger()`: warning+ logs and crash reports to `/data/debug.log` (2×512 KB). RingLogger is RAM-only and loses everything on reboot.
+- `Diagnostics.log_boot()`: a `ts,boot,voltage,wifi` line per boot in `/data/power.log`. A boot with no graceful `/data/shutdown.txt` means a hard reset (watchdog, brownout, power cut).
+- `NameBadge.Diagnostics` child: minute health samples (load, memory, scheduler queues, key process mailboxes, voltage, wifi state) to `/data/health.jsonl` (2×2 MB) plus the last two boots' `dmesg`. `Diagnostics.measure/2` already wraps display draws, cover download/dither/compose and art refills; while the recorder is off those calls cost a dropped cast.
 
 ## Gotchas Worth Remembering
 
-- **WiFi is off while the Spotify screen is showing on battery** (except during refill bursts). On USB power it stays on. To SSH to a wifi-dark badge: exit the screen, plug in USB power, or use the USB cable directly (SSH over `usb0` works regardless of WiFi).
-- **BEAM monotonic time is negative** (starts around −576×10⁹ ms). Never compare `System.monotonic_time/1` against a literal `0` deadline — it reads as "deadline passed 18 years from now". This exact bug silently disabled ArtCache refills once already.
-- **Never leave a `GenServer.call` on the render path at its 5 s default.** The board has two cores and the art refill saturates both: a grayscale draw measured 1.3 s idle and 4.0 s under dither load, and `NameBadge.Battery` gets starved long enough that reading a cached float times out. A blown timeout used to crash the screen, drop to the menu, and crash the menu too, in a loop until a hard reset. `Display` (30 s draw / 60 s render), `Battery` (30 s) and `ArtCache` (30 s) now carry explicit timeouts. Note `EInk.draw/2` and `EInk.clear/2` hardcode the 5 s default, so `Display` calls that GenServer directly.
-
-- **Screen templates are Typst, not EEx.** Use Elixir string interpolation `#{var}`; `<%= %>` will crash the renderer. A leading `#` on the first Typst line also crashes it.
-- **Status bar is built in `lib/name_badge/layout.ex` `icons_markup/0`.** It's a Typst `#place(top + right, …)` with a `stack(dir: ltr, …)` of `image("images/icons/*.png")` calls. To add an icon: drop a ~16 pt PNG into `priv/typst/images/icons/` and add one `image(...)` line in the stack.
-- **`mix upload` is NOT a task in this project** — use the SSH pipe or `upload.sh`.
-- **Clock drift after boot** causes TLS "Certificate Expired" errors and NervesCloud 401s. They self-heal via NTP; force with `NervesTime.restart_ntpd()`.
+- **WiFi is off on battery** (except during refill bursts). To SSH in: plug in USB power (WiFi comes back within ~10 s) or use the USB cable directly (SSH over `usb0` works regardless of WiFi).
+- **BEAM monotonic time is negative** (starts around −576×10⁹ ms). Never compare `System.monotonic_time/1` against a literal `0` deadline: it reads as "deadline passed 18 years from now". This exact bug silently disabled ArtCache refills once already.
+- **Never leave a `GenServer.call` on the render path at its 5 s default.** The board has two cores and the art refill saturates both: a grayscale draw measured 1.3 s idle and 4.0 s under dither load. A blown timeout used to crash the screen into a reset loop. `Display` (30 s draw / 60 s render) and `ArtCache` (30 s) carry explicit timeouts. `EInk.draw/2` and `EInk.clear/2` hardcode the 5 s default, so `Display` calls that GenServer directly.
+- **Typst templates use Elixir interpolation `#{var}`, not EEx.** A leading `#` on the first Typst line crashes the renderer.
+- **`mix upload` is NOT a task in this project**: use `./scripts/push.sh`.
+- **Clock drift after boot** causes TLS "Certificate Expired" errors. They self-heal via NTP; force with `NervesTime.restart_ntpd()`.
 - **After reflash**, run `ssh-keygen -R wisteria.local` to clear the stale host key.
 - **Post-fwup reboot takes 2–3 minutes**, not 30–60 s. Ping comes back first, then SSH once BEAM is up.
-- **OTA penalty box**: too many reboots during an update parks the device for ~1 minute. Keep on USB power and wait.
-- **Keep the badge on USB-C power during OTA updates** — they can take ~10 min.
+- **Keep the badge on USB-C power during OTA updates.**
 - **WiFi chip is 2.4 GHz only** (Realtek RTL8188FU, visible in dmesg). Dual-band SSIDs fine; 5 GHz-only SSIDs won't connect.
-- **`VintageNetWiFi.quick_configure(ssid, psk)` persists across reboots** — usually faster than rebuilding firmware to change `NERVES_WIFI_SSID`/`NERVES_WIFI_PASSPHRASE`.
-- **Check connection state, not just "associated"**: `VintageNet.get(["interface","wlan0","connection"])` → `:disconnected | :lan | :internet`. Wait for `:internet` before expecting NTP / NervesCloud / weather sync.
-- **`mix` on PATH is a mise shim, and mise's config env wins over yours.** `.mise.local.toml` pins `MIX_TARGET=host` for the simulator, so `MIX_TARGET=trellis mix firmware` silently builds for *host* — the Nerves banner prints `MIX_TARGET: host` and it's easy to miss. Go through `mise exec -- env MIX_TARGET=trellis mix ...` (what `scripts/build.sh` and `scripts/burn.sh` do) to get the real binary with the target you asked for.
-- **Switching targets corrupts `_build`**: if you build for `host` then `trellis` (or vice versa), native NIFs end up wrong-arch. Symptom: `scrub-otp-release.sh: ERROR: Unexpected executable format`. Fix: `mix deps.clean dither typst && MIX_TARGET=trellis mix deps.get`.
+- **Check connection state, not just "associated"**: `VintageNet.get(["interface","wlan0","connection"])` → `:disconnected | :lan | :internet`.
+- **`mix` on PATH is a mise shim, and mise's config env wins over yours.** A `MIX_TARGET` in any mise config silently overrides an `export`. Go through `mise exec -- env MIX_TARGET=trellis mix ...` (what `scripts/build.sh` and `scripts/burn.sh` do).
+- **WiFi power-on glitches the storage bus**: 162 of 163 logged `sunxi-mmc 4020000.mmc: data error` lines landed within 5 s of a WiFi power-on (the chip and eMMC likely share the 3.3 V rail). The kernel retries; across two months of logs no write was ever lost and ext4's error count is 0. Worth watching, not handling.
 
 ## When Answering Hardware / Firmware Questions
 

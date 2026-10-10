@@ -1,15 +1,15 @@
 defmodule NameBadge.Battery do
-  use GenServer
+  @moduledoc """
+  Reads the battery voltage straight from the ADC and interprets it.
 
-  def start_link(args), do: GenServer.start_link(__MODULE__, args, name: __MODULE__)
+  Stateless: every call is one sysfs read, so nothing polls in the
+  background and no caller can be starved waiting on a busy process.
+  """
 
-  # Reading the cached voltage is instant, but the process can be starved for
-  # seconds while the art refill saturates both cores — and every status bar
-  # render asks twice. The 5 s call default made that starvation crash the
-  # caller instead of just making it slow.
-  @call_timeout :timer.seconds(30)
+  @adc_path "/sys/bus/iio/devices/iio:device0/in_voltage0_raw"
 
-  def voltage(), do: GenServer.call(__MODULE__, :get_voltage, @call_timeout)
+  # raw / 4095 (12-bit ADC) * 1.8 V reference * (453k + 51k) / 51k divider
+  @volts_per_count 1.8 / 4095 * 9.8823529412
 
   # Measured on this badge (2026-10, two full drains with WiFi on, 6-7 h
   # each): remaining runtime as a fraction of the whole drain, against the
@@ -35,6 +35,19 @@ defmodule NameBadge.Battery do
   # 3.56 V (it survived at 3.57 V). Below this, nothing should power it up
   # on its own. Roughly 35% on the curve above.
   @low_voltage 3.65
+
+  @doc """
+  Current input voltage. On USB power this reads the input rail (> 4.5 V).
+
+  @example `Battery.voltage() // 3.82`
+  """
+  def voltage() do
+    @adc_path
+    |> File.read!()
+    |> String.trim()
+    |> String.to_integer()
+    |> Kernel.*(@volts_per_count)
+  end
 
   @doc """
   Whether the badge is on USB power. The ADC reads the input rail, which
@@ -76,46 +89,5 @@ defmodule NameBadge.Battery do
         {high_v, high_pct} = List.last(above)
         round(low_pct + (voltage - low_v) / (high_v - low_v) * (high_pct - low_pct))
     end
-  end
-
-  @impl true
-  def init(opts) do
-    interval = Keyword.get(opts, :interval, 500)
-    alpha = Keyword.get(opts, :alpha, 0.9)
-
-    timer = :timer.send_interval(interval, :update)
-
-    {:ok, %{interval: interval, alpha: alpha, timer: timer, voltage: read_voltage()}}
-  end
-
-  @impl true
-  def handle_call(:get_voltage, _from, state) do
-    {:reply, state.voltage, state}
-  end
-
-  @impl true
-  def handle_info(:update, state) do
-    # low pass filter (exponential average)
-    state =
-      update_in(state.voltage, fn v ->
-        v * state.alpha + read_voltage() * (1 - state.alpha)
-      end)
-
-    {:noreply, state}
-  end
-
-  defp read_voltage do
-    adc_raw =
-      "/sys/bus/iio/devices/iio:device0/in_voltage0_raw"
-      |> File.read!()
-      |> String.trim()
-      |> String.to_integer()
-
-    # adc_raw / MAX_ADC_VALUE * ADC_REFERENCE_VOLTAGE * VOLTAGE_DIVIDER
-    # On the PCB, the voltage divider is 453k and 51k resistors
-    # So the value for the voltage divider is (453 + 51) / 51 = 9.8823529412
-    # (the units cancel in this equation)
-
-    adc_raw / 4095.0 * 1.8 * 9.8823529412
   end
 end

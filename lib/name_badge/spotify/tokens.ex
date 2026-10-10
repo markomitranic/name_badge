@@ -5,7 +5,7 @@ defmodule NameBadge.Spotify.Tokens do
   refresh_token for short-lived access_tokens on demand.
 
   Persists any rotated refresh_token returned by Spotify to a JSON file under
-  /data (or tmp on host) so we survive reboots without needing to rebuild
+  /data so we survive reboots without needing to rebuild
   firmware every time Spotify rotates the token.
   """
 
@@ -119,10 +119,11 @@ defmodule NameBadge.Spotify.Tokens do
   end
 
   defp refresh_via_spotify(state) do
-    body = URI.encode_query(%{
-      "grant_type" => "refresh_token",
-      "refresh_token" => state.refresh_token
-    })
+    body =
+      URI.encode_query(%{
+        "grant_type" => "refresh_token",
+        "refresh_token" => state.refresh_token
+      })
 
     auth = Base.encode64("#{state.client_id}:#{state.client_secret}")
 
@@ -139,7 +140,9 @@ defmodule NameBadge.Spotify.Tokens do
       {:ok, %{status: status, body: %{"error" => "invalid_grant"} = body}} ->
         Logger.warning("Spotify refresh_token revoked: #{inspect(body)}")
         clear_persisted()
-        {:error, {:invalid_grant, status}, %{state | refresh_token: nil, access_token: nil, expires_at: nil}}
+
+        {:error, {:invalid_grant, status},
+         %{state | refresh_token: nil, access_token: nil, expires_at: nil}}
 
       {:ok, %{status: status, body: body}} ->
         Logger.error("Spotify token refresh failed: HTTP #{status} #{inspect(body)}")
@@ -213,12 +216,5 @@ defmodule NameBadge.Spotify.Tokens do
     Map.new(map, fn {k, v} -> {String.to_atom(k), v} end)
   end
 
-  if Mix.target() == :host do
-    defp token_file do
-      System.tmp_dir!()
-      |> Path.join("spotify_tokens.json")
-    end
-  else
-    defp token_file, do: "/data/spotify_tokens.json"
-  end
+  defp token_file, do: "/data/spotify_tokens.json"
 end

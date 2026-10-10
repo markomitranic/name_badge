@@ -19,9 +19,6 @@ config :shoehorn, init: [:nerves_runtime, :nerves_pack]
 # Advance the system clock on devices without real-time clocks.
 config :nerves, :erlinit, update_clock: true
 
-# set tzdata dir for Nerves device
-config :tzdata, :data_dir, "/data/tzdata"
-
 # E-ink display (new drawing-pipeline API). Started as a named GenServer from
 # the supervision tree; drivers read this app env in EInk.init/1.
 config :eink,
@@ -67,11 +64,6 @@ config :vintage_net,
   ],
   config: [
     {"usb0", %{type: VintageNetDirect}},
-    {"eth0",
-     %{
-       type: VintageNetEthernet,
-       ipv4: %{method: :dhcp}
-     }},
     {"wlan0", %{type: VintageNetWiFi}}
   ]
 
@@ -98,31 +90,5 @@ config :mdns_lite,
       protocol: "sftp-ssh",
       transport: "tcp",
       port: 22
-    },
-    %{
-      protocol: "epmd",
-      transport: "tcp",
-      port: 4369
     }
   ]
-
-# Import target specific config. This must remain at the bottom
-# of this file so it overrides the configuration defined above.
-# Uncomment to use target specific configurations
-
-# import_config "#{Mix.target()}.exs"
-
-product_key = System.get_env("NH_PRODUCT_KEY")
-product_secret = System.get_env("NH_PRODUCT_SECRET")
-
-if product_key && product_secret do
-  config :nerves_hub_link,
-    host: "manage.nervescloud.com",
-    shared_secret: [
-      product_key: product_key,
-      product_secret: product_secret
-    ],
-    geo: [
-      resolver: NervesHubLink.Extensions.Geo.DefaultResolver
-    ]
-end

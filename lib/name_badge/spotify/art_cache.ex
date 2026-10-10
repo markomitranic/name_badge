@@ -2,9 +2,9 @@ defmodule NameBadge.Spotify.ArtCache do
   @moduledoc """
   Disk-backed queue of prefetched, display-ready album covers.
 
-  Covers are downloaded in batches and stored under `/data/spotify_art`
-  (a temp dir on host) as `<id>.png` + `<id>.json` metadata pairs, so the
-  screen can rotate albums without touching the network. When the queue
+  Covers are downloaded in batches and stored under `/data/spotify_art` as
+  `<id>.png` + `<id>.json` metadata pairs, so the screen can rotate albums
+  without touching the network. When the queue
   drops below a low-water mark, a background task tops it back up to a full
   batch. The queue survives reboots.
 
@@ -43,17 +43,13 @@ defmodule NameBadge.Spotify.ArtCache do
   @impl GenServer
   def init(:ok) do
     File.mkdir_p!(cache_dir())
-    {:ok, %{refill_task: nil, cooldown_until: nil, consumer: nil, consumer_ref: nil}}
+    {:ok, %{refill_task: nil, cooldown_until: nil}}
   end
 
   # A take with no refill in flight also powers WiFi down (a no-op when
-  # it's already off) — the Spotify screen is the only caller, and while
-  # it drives the rotation the chip should only be up during refill bursts.
-  # The caller is monitored so a refill burst that outlives the screen
-  # leaves WiFi alone instead of cutting it under the next screen.
+  # it's already off): the chip should only be up during refill bursts.
   @impl GenServer
-  def handle_call(:take, {caller, _tag}, state) do
-    state = track_consumer(state, caller)
+  def handle_call(:take, _from, state) do
     cover = pop_entry()
     state = maybe_refill(state)
 
@@ -62,13 +58,6 @@ defmodule NameBadge.Spotify.ArtCache do
     Logger.info("Spotify art cache: #{count_entries()} covers on disk after take")
 
     {:reply, cover, state}
-  end
-
-  defp track_consumer(%{consumer: pid} = state, pid), do: state
-
-  defp track_consumer(state, pid) do
-    if state.consumer_ref, do: Process.demonitor(state.consumer_ref, [:flush])
-    %{state | consumer: pid, consumer_ref: Process.monitor(pid)}
   end
 
   # cooldown_until is a monotonic-clock deadline or nil. It must never be
@@ -93,15 +82,12 @@ defmodule NameBadge.Spotify.ArtCache do
     System.monotonic_time(:millisecond) < deadline
   end
 
-  # WiFi goes back down when the burst ends — but only if the Spotify screen
-  # is still alive. If the user left mid-refill, the exit already turned WiFi
-  # on and this must not undo it.
+  # WiFi goes back down as soon as the burst ends, however it ended.
   @impl GenServer
   def handle_info({ref, added}, %{refill_task: %Task{ref: ref}} = state) do
     Process.demonitor(ref, [:flush])
     Logger.info("Spotify art cache refill added #{added} covers")
-
-    if state.consumer, do: Network.wifi_off()
+    Network.wifi_off()
 
     cooldown =
       if added == 0 do
@@ -115,13 +101,9 @@ defmodule NameBadge.Spotify.ArtCache do
 
   def handle_info({:DOWN, ref, :process, _pid, reason}, %{refill_task: %Task{ref: ref}} = state) do
     Logger.warning("Spotify art cache refill crashed: #{inspect(reason)}")
-    if state.consumer, do: Network.wifi_off()
+    Network.wifi_off()
     cooldown = System.monotonic_time(:millisecond) + @failure_cooldown
     {:noreply, %{state | refill_task: nil, cooldown_until: cooldown}}
-  end
-
-  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{consumer_ref: ref} = state) do
-    {:noreply, %{state | consumer: nil, consumer_ref: nil}}
   end
 
   def handle_info(_msg, state), do: {:noreply, state}
@@ -214,9 +196,5 @@ defmodule NameBadge.Spotify.ArtCache do
     :ok
   end
 
-  if Mix.target() == :host do
-    defp cache_dir, do: Path.join(System.tmp_dir!(), "name_badge_spotify_art")
-  else
-    defp cache_dir, do: "/data/spotify_art"
-  end
+  defp cache_dir, do: "/data/spotify_art"
 end

@@ -1,9 +1,13 @@
 defmodule NameBadge.Diagnostics do
   @moduledoc """
-  Persists minute health samples and operation timings for crash investigations.
+  Crash forensics that survive reboots. All of it is off by default.
 
-  Two 2 MB log files survive restarts. Kernel snapshots retain the current and
-  previous boot. Sampling never calls the monitored GenServers.
+  Three independent recorders, each switched on from `NameBadge.Application`:
+  a warning+ log on disk, a boot marker per start, and this GenServer, which
+  persists minute health samples plus operation timings. Two 2 MB sample
+  files rotate; kernel snapshots retain the current and previous boot.
+  Sampling never calls the monitored GenServers. While the GenServer is not
+  running, `measure/2` and `event/1` cost a dropped cast and nothing more.
   """
 
   use GenServer
@@ -16,15 +20,45 @@ defmodule NameBadge.Diagnostics do
     NameBadge.Diagnostics,
     NameBadge.Display,
     EInk,
-    NameBadge.Battery,
     NameBadge.PowerMonitor,
-    NameBadge.ScreenManager,
+    NameBadge.Spotify.Screen,
     NameBadge.Spotify.ArtCache,
     NameBadge.Spotify.Library,
     NameBadge.Spotify.Tokens,
     VintageNet.RouteManager,
     VintageNet.Updater
   ]
+
+  @doc """
+  Persists warning+ log entries, including crash reports, to /data/debug.log
+  (2 x 512 KB, rotated). RingLogger is RAM-only and loses them on reboot.
+
+  @example `Diagnostics.attach_disk_logger() // :ok`
+  """
+  def attach_disk_logger() do
+    _ =
+      :logger.add_handler(:disk_log, :logger_std_h, %{
+        config: %{file: ~c"/data/debug.log", max_no_bytes: 512_000, max_no_files: 2},
+        level: :warning
+      })
+
+    :ok
+  end
+
+  @doc """
+  Appends a "ts,boot,voltage,wifi" line to /data/power.log. A boot line with
+  no matching graceful /data/shutdown.txt means a hard reset (watchdog,
+  brownout, power cut). The timestamp may be stale until NTP syncs.
+
+  @example `Diagnostics.log_boot() // :ok`
+  """
+  def log_boot() do
+    ts = DateTime.utc_now() |> DateTime.to_iso8601()
+    voltage = NameBadge.Battery.voltage() |> Float.round(4)
+    wifi = if NameBadge.Network.wifi_present?(), do: "1", else: "0"
+    File.write("/data/power.log", "#{ts},boot,#{voltage},#{wifi}\n", [:append])
+    :ok
+  end
 
   @doc "Starts the device health recorder with an optional storage directory."
   def start_link(opts) do
@@ -114,7 +148,7 @@ defmodule NameBadge.Diagnostics do
       scheduler_queues: :erlang.statistics(:run_queue_lengths_all),
       normal_schedulers: :erlang.system_info(:schedulers),
       processes: Map.new(@monitored, &process_sample/1),
-      voltage: voltage(),
+      voltage: NameBadge.Battery.voltage() |> Float.round(4),
       wifi_present: File.exists?("/sys/class/net/wlan0"),
       wifi_state: read_text("/sys/class/net/wlan0/operstate")
     })
@@ -194,13 +228,6 @@ defmodule NameBadge.Diagnostics do
       end
 
     {inspect(name), inspect(info)}
-  end
-
-  defp voltage do
-    case "/sys/bus/iio/devices/iio:device0/in_voltage0_raw" |> read_text() |> Integer.parse() do
-      {raw, _rest} -> Float.round(raw / 4095.0 * 1.8 * 9.8823529412, 4)
-      :error -> nil
-    end
   end
 
   defp read_text(path) do

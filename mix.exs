@@ -6,8 +6,6 @@ defmodule NameBadge.MixProject do
   @version "0.3.1"
   @all_targets [:trellis]
 
-  @nerves_hub_configured? System.get_env("NH_PRODUCT_KEY") != nil
-
   def project do
     [
       name: @name,
@@ -21,13 +19,10 @@ defmodule NameBadge.MixProject do
     ]
   end
 
-  def cli do
-    [preferred_targets: [run: :host, test: :host]]
-  end
-
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
+      # Typst templates go through EEx inside the typst dep.
       extra_applications: [:logger, :runtime_tools, :eex],
       mod: {NameBadge.Application, []}
     ]
@@ -36,9 +31,6 @@ defmodule NameBadge.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      # Dependencies for :host target
-      {:phoenix_playground, "~> 0.1.8", targets: [:host]},
-
       # Dependencies for all targets
       {:nerves, "~> 1.10", runtime: false},
       {:shoehorn, "~> 0.9.1"},
@@ -47,14 +39,9 @@ defmodule NameBadge.MixProject do
       {:req, "~> 0.5"},
       {:dither, "~> 0.2.4", override: true},
       {:typst, "~> 0.3"},
-      {:tzdata, "~> 1.1"},
-
-      # Allow Nerves.Runtime on host to support development, testing and CI.
-      # See config/host.exs for usage.
       {:nerves_runtime, "~> 0.13.0"},
 
       # Dependencies for all targets except :host
-      {:nerves_hub_link, "~> 2.9", targets: @all_targets, runtime: @nerves_hub_configured?},
       {:nerves_pack, "~> 0.7.1", targets: @all_targets},
       {:circuits_spi, "~> 2.0", targets: @all_targets},
       {:circuits_gpio, "~> 2.1.3", targets: @all_targets},
@@ -63,10 +50,8 @@ defmodule NameBadge.MixProject do
       # `grayscale-on-dp`). Upstream still ships grayscale as an empty stub, so
       # the fork can't be dropped yet; swap back to hex once upstream cuts a
       # release with a real grayscale LUT. For live LUT tuning use the local
-      # ../eink clone instead (see NameBadge.GrayTune).
+      # ../eink clone instead.
       {:eink, github: "markomitranic/eink", branch: "grayscale-on-dp", targets: @all_targets},
-      {:vintage_net_wizard,
-       github: "nerves-networking/vintage_net_wizard", targets: @all_targets},
 
       # Dependencies for specific targets
       # NOTE: It's generally low risk and recommended to follow minor version

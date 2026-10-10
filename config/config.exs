@@ -8,15 +8,9 @@ import Config
 # Enable the Nerves integration with Mix
 Application.start(:nerves_bootstrap)
 
-# set the time zone database
-config :elixir, :time_zone_database, Tzdata.TimeZoneDatabase
-
-config :name_badge, :timezone, "Europe/Stockholm"
-
-# Spotify — all three env vars must be set for the Spotify screen to light up.
-# Obtain via `elixir scripts/spotify_auth.exs` on your laptop; paste into
-# .mise.local.toml. If any are missing the screen is gracefully hidden from
-# the top-level menu.
+# Spotify: all three env vars must be set, or the badge shows a "not
+# configured" page. Obtain via `elixir scripts/spotify_auth.exs` on your
+# laptop and paste into .mise.local.toml.
 config :name_badge, :spotify,
   client_id: System.get_env("SPOTIFY_CLIENT_ID"),
   client_secret: System.get_env("SPOTIFY_CLIENT_SECRET"),
@@ -35,8 +29,4 @@ config :nerves, :firmware,
 
 config :nerves, source_date_epoch: "1753482945"
 
-if Mix.target() == :host do
-  import_config "host.exs"
-else
-  import_config "target.exs"
-end
+import_config "target.exs"

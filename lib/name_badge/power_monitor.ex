@@ -4,9 +4,8 @@ defmodule NameBadge.PowerMonitor do
 
   Complements the "WiFi never turns off while USB-powered" guard in
   `NameBadge.Network.wifi_off/0`: the guard covers power-off attempts while
-  charging, this monitor covers the chip being off while charging for any
-  other reason — plugged in after the Spotify screen powered it down, or
-  stranded off by a crash that skipped the screen's terminate callback.
+  plugged in, this monitor brings the chip back when a cable is plugged in
+  after it was powered down on battery.
   """
 
   use GenServer

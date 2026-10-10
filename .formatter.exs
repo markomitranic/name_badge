@@ -2,7 +2,7 @@
 [
   inputs: [
     "{mix,.formatter}.exs",
-    "{config,lib,test}/**/*.{ex,exs}",
+    "{config,lib}/**/*.{ex,exs}",
     "rootfs_overlay/etc/iex.exs"
   ]
 ]
