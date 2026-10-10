@@ -35,7 +35,7 @@ Supervision tree (`NameBadge.Application`, one_for_one): `EInk` (panel driver si
 
 ## Power
 
-- **WiFi is never powered.** No `wlan0` config, no power manager; `WIFI_EN` is driven to its off level at boot. A stale persisted `wlan0` config may still sit in `/data/vintage_net`; with the chip off the interface never appears, so it's inert.
+- **WiFi is never powered.** No `wlan0` config, no power manager; `WIFI_EN` is driven to its off level at boot. The old persisted `wlan0` config (with credentials) was deleted from `/data/vintage_net` along with the rest of the pre-offline `/data` files.
 - **CPU1 offline.** The July 2026 A/B test hinted ~10% lower drain with CPU1 offline but never completed its control leg. Unmeasured since.
 - **No real suspend exists on this board**: `/sys/power/mem_sleep` offers only `s2idle`, the RTC has no `wakealarm`, there is no cpufreq (fixed clock, fixed regulators) and no cpuidle driver. Timed power-cycling would need external hardware (no PMIC with a wake timer).
 - **`Battery` is stateless**: one sysfs read per call. The discharge curve (`Battery.percentage_at/1`) comes from two full drains with WiFi on (6-7 h, dead at ~3.35 V); offline runtime will be far longer and the curve's time scale no longer applies, only its voltage → charge shape.
@@ -138,6 +138,7 @@ If `usb_bulk_send() ERROR -1`: let it sit in FEL a few seconds, use a known-good
 - **`mix` on PATH is a mise shim, and mise's config env wins over an `export`.** Use `mise exec -- env MIX_TARGET=trellis mix ...` (what the scripts do).
 - **`mix upload` doesn't exist here**, despite what `mix firmware` prints. Use `./scripts/push.sh`.
 - **After a reflash**, `ssh-keygen -R wisteria.local`. The reboot takes 2-3 minutes; ping returns before SSH.
+- **`/data/shutdown.txt` is erlinit's report on the previous shutdown** (uptime, intentional or not, dmesg). The first boot of the offline firmware (2026-10-10) ended on its own ~3 s after the VM started (not intentional, exit status 0, no crash dump) and erlinit rebooted into a healthy boot; three reboots afterwards were clean. Cause unknown. After a flash, read this file before trusting the badge.
 - **No NTP any more**, so the badge clock is wrong. Nothing displays or depends on it.
 
 ## Git

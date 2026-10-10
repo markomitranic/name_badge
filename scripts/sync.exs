@@ -62,7 +62,9 @@ defmodule Sync.Spotify do
       )
     end
 
-    body["access_token"]
+    body["access_token"] ||
+      raise "Spotify refused the refresh token (#{body["error_description"] || body["error"]}). " <>
+              "Run scripts/spotify_auth.exs again and update .mise.local.toml"
   end
 
   @doc """

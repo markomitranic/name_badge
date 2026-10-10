@@ -53,18 +53,44 @@ mix archive.install hex nerves_bootstrap --force
 SPOTIFY_CLIENT_ID=... SPOTIFY_CLIENT_SECRET=... elixir scripts/spotify_auth.exs
 ```
 
-Paste the three printed variables into `.mise.local.toml` (git-ignored) under `[env]`.
+Paste the three printed variables into `.mise.local.toml` under `[env]`. The file is git-ignored, so it only exists in the checkout you put it in; copy it along to a fresh clone.
 
-## Everyday use
+## Updating the covers
 
-Plug the badge into the laptop with a USB-C **data** cable, then:
+The whole routine, for when you've saved new albums and haven't touched this in months:
 
-```sh
-mise exec -- elixir scripts/sync.exs          # mirror the library, render new frames
-mise exec -- elixir scripts/push_covers.exs   # copy them to the badge; it shows a fresh cover
-```
+1. **Get current.** `git pull`, then `mise install` if mise complains about a missing tool.
+2. **Check the secrets.** `.mise.local.toml` must hold `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` and `SPOTIFY_REFRESH_TOKEN` (see [Setup](#setup)).
+3. **Sync the library:**
+   ```sh
+   mise exec -- elixir scripts/sync.exs
+   ```
+   The first run in a while spends a minute or two installing its dependencies. It then fetches your saved albums, downloads covers of new ones, renders their frames and deletes the files of albums you un-saved. If it prints `Spotify rotated the refresh token`, paste the new token into `.mise.local.toml` right away; the old one stops working.
+4. **Have a look** (optional): `git status .spotify` lists what changed; new frames are plain PNGs in `.spotify/rendered/`.
+5. **Plug the badge in** with a USB-C **data** cable and wait until `ping wisteria.local` answers (up to a minute after plugging in).
+6. **Push the frames:**
+   ```sh
+   mise exec -- elixir scripts/push_covers.exs
+   ```
+   Only new frames are uploaded and removed albums are deleted, then the badge shows a fresh cover. `Already up to date` means there was nothing to do.
+7. **Commit the library:**
+   ```sh
+   git add .spotify && git commit -m "Sync Spotify library" && git push
+   ```
 
-Firmware changes:
+| Problem | Fix |
+|---|---|
+| `wisteria.local` doesn't answer, or the push times out | The cable or port is charge-only. With a working link the Mac gets a new network interface with a 172.31.x.x address |
+| `SPOTIFY_... is not set` | No `.mise.local.toml` in this checkout, or mise doesn't trust it yet (`mise trust`) |
+| `Spotify refused the refresh token` | Access was revoked (app deleted, password changed). Re-run `scripts/spotify_auth.exs` and update `.mise.local.toml` |
+| Badge shows "No covers yet" | `/data` was wiped, usually by a FEL burn. Push again; a full upload takes about 2 minutes |
+| Badge stuck on one cover, button does nothing | Most likely a flat battery: e-ink keeps the last image without power. Charge it. If it still won't rotate, `./scripts/ssh.sh` and `Nerves.Runtime.reboot()` |
+
+To change how frames look, edit `@recipe` in `scripts/sync.exs` and run `mise exec -- elixir scripts/sync.exs --render-only`. Every recipe change re-renders and re-commits all frames (~73 MB), so judge a handful before committing.
+
+## Firmware
+
+Only needed when the badge's code changes:
 
 ```sh
 ./scripts/build.sh && ./scripts/push.sh   # build, then flash over USB (wisteria.local)
