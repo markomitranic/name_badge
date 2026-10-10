@@ -111,9 +111,9 @@ Application.ensure_all_started(:nerves_hub_link)
    mix local.rebar --force
    mix archive.install hex nerves_bootstrap --force
    ```
-3. Nerves build prereqs — all four are required (`pkg-config` for `vintage_net_wifi`'s native build):
+3. Nerves build prereqs — all are required (`pkg-config` for `vintage_net_wifi`'s native build, `coreutils` for `gstat` in `mix firmware`):
    ```sh
-   brew install xz fwup squashfs pkg-config
+   brew install xz fwup squashfs pkg-config coreutils
    ```
 4. `sunxi-tools` for FEL / USB recovery flashing only — prefer the HEAD build:
    ```sh
